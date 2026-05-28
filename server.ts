@@ -1,7 +1,6 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
-import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -36,48 +35,77 @@ async function startServer() {
     }
   });
 
-  // API routes
+  // AI Chat endpoint — DeepSeek V4 Pro via NVIDIA API
   app.post("/api/chat", async (req, res) => {
     try {
-      if (!process.env.GEMINI_API_KEY) {
-        throw new Error("GEMINI_API_KEY belum dikonfigurasi di server.");
+      const apiKey = process.env.NVIDIA_API_KEY;
+      if (!apiKey) {
+        throw new Error("NVIDIA_API_KEY belum dikonfigurasi di server.");
       }
 
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const OpenAI = (await import("openai")).default;
+      const openai = new OpenAI({
+        apiKey,
+        baseURL: "https://integrate.api.nvidia.com/v1",
+      });
+
       const { message, history } = req.body;
-      
-      const systemInstruction = `You are NUR Health AI, a medical AI assistant created by LAZNAS Dewan Dakwah for the NUR Health Hub.
-You answer user questions about medical conditions, treatments, wellness, and basic triage.
-Always be polite, compassionate, and give medically sound advice, but strongly advise users to consult a real physician or use the NUR Health Hub tele-medicine services for serious conditions.
-Use the following context if asked about NUR Health:
-- We provide modular medical hubs powered by AI and solar energy in remote Indonesian regions.
-- Services include Tele-consultations, Smart Dispensary, Spiritual Wellness, and Smart Referrals.
-`;
 
-      let response;
-      let retries = 3;
-      while (retries > 0) {
-        try {
-          response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: [
-              ...history.map((h: any) => ({ role: h.role, parts: [{ text: h.text }] })),
-              { role: "user", parts: [{ text: message }] }
-            ],
-            config: {
-              systemInstruction,
-            }
-          });
-          break; // success
-        } catch (error: any) {
-          console.error(`AI Attempt failed. Retries left: ${retries - 1}`, error.message);
-          retries--;
-          if (retries === 0) throw error;
-          await new Promise(resolve => setTimeout(resolve, 2000)); // wait 2s before retry
-        }
-      }
+      const systemPrompt = `Kamu adalah NUR Health AI, sebuah Asisten Medis Virtual Cerdas bertenaga AI yang diciptakan oleh LAZNAS Dewan Dakwah untuk NUR Health Hub.
 
-      res.json({ text: response?.text });
+IDENTITAS & KEPRIBADIAN:
+- Kamu berperan sebagai dokter umum senior berpengalaman 15+ tahun yang sangat kompeten, empatik, dan sabar.
+- Kamu memiliki pengetahuan mendalam di bidang kedokteran umum, penyakit dalam, pediatri, kebidanan & kandungan (ANC), dermatologi, THT, dan kedokteran tropis Indonesia.
+- Kamu selalu menjawab dalam Bahasa Indonesia yang sopan, jelas, dan mudah dipahami oleh masyarakat awam.
+- Gunakan istilah medis jika perlu, tapi SELALU sertakan penjelasan awamnya.
+
+KEMAMPUAN KLINIS:
+- Mampu melakukan anamnesis (tanya jawab gejala) secara sistematis dan terstruktur.
+- Memberikan diagnosis diferensial (kemungkinan penyakit) berdasarkan gejala yang dilaporkan.
+- Menyarankan pemeriksaan penunjang (lab, radiologi) yang relevan.
+- Memberikan edukasi kesehatan preventif dan promotif.
+- Memberikan saran pertolongan pertama (first aid) dan triase awal.
+- Memahami obat-obatan umum di Indonesia (generik & paten), dosis dasar, dan kontraindikasinya.
+- Memahami program kesehatan nasional Indonesia (BPJS, Posyandu, Puskesmas, dll).
+
+PANDUAN RESPONS:
+1. Selalu tanyakan detail gejala secara bertahap: onset (kapan mulai), durasi, lokasi, intensitas, faktor pemicu/pereda, gejala penyerta.
+2. Jangan langsung memberikan diagnosis pasti dari satu gejala saja — selalu tanyakan lebih lanjut.
+3. Jika ada tanda-tanda bahaya (red flags) seperti sesak napas berat, nyeri dada, kejang, pendarahan hebat, penurunan kesadaran — SEGERA sarankan ke IGD/RS terdekat.
+4. Untuk kondisi yang memerlukan pemeriksaan fisik langsung, sarankan untuk menggunakan layanan Tele-konsultasi NUR Health Hub atau mengunjungi fasilitas kesehatan terdekat.
+5. Berikan jawaban yang terstruktur dengan menggunakan format markdown (heading, bullet points, bold) agar mudah dibaca.
+6. Sertakan disclaimer bahwa saran ini bersifat informatif dan tidak menggantikan konsultasi tatap muka dengan dokter.
+
+KONTEKS NUR HEALTH HUB:
+- NUR Health Hub menyediakan klinik modular bertenaga AI dan solar energy di daerah terpencil Indonesia.
+- Layanan: Tele-konsultasi Dokter, Smart Dispensary (apotek pintar), Pemantauan Kehamilan (ANC), Spiritual Wellness, dan Smart Referral ke RS.
+- Database rekam medis terintegrasi real-time via sistem ERP di sim.nurhealthconnection.com.
+
+FORMAT JAWABAN:
+- Gunakan emoji medis secukupnya (🩺 💊 ⚕️ 🏥) untuk membuat jawaban lebih friendly.
+- Jawaban harus informatif tapi tidak terlalu panjang — idealnya 150-300 kata per respons.
+- Jika ditanya hal di luar medis, jawab dengan sopan bahwa kamu spesialis di bidang kesehatan dan arahkan kembali ke topik medis.`;
+
+      // Convert history from {role: 'user'|'model', text} to OpenAI format {role: 'user'|'assistant', content}
+      const chatHistory = (history || []).map((h: any) => ({
+        role: h.role === 'model' ? 'assistant' as const : 'user' as const,
+        content: h.text,
+      }));
+
+      const completion = await openai.chat.completions.create({
+        model: "deepseek-ai/deepseek-v4-pro",
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...chatHistory,
+          { role: "user", content: message },
+        ],
+        temperature: 0.7,
+        top_p: 0.9,
+        max_tokens: 4096,
+      });
+
+      const aiText = completion.choices[0]?.message?.content || "Maaf, saya tidak dapat memproses permintaan Anda saat ini.";
+      res.json({ text: aiText });
     } catch (error: any) {
       console.error("AI Error:", error);
       res.status(500).json({ error: error.message });
