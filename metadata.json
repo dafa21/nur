@@ -1,0 +1,8 @@
+{
+  "name": "NUR Health Connection",
+  "description": "Modular Medical Innovation by LAZNAS Dewan Dakwah. Integrating AI, green energy, and spiritual wellness to connect digital nomads and local communities.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

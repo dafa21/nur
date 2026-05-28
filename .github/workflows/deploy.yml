@@ -1,0 +1,95 @@
+name: Deploy to VPS (nurhealthconnection.com)
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  deploy:
+    name: Deploy App to VPS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: 22
+          script: |
+            echo "=== MEMULAI DEPLOYMENT ==="
+            
+            DEPLOY_PATH="/var/www/nurhealth"
+            TRIGGER_BRANCH="${{ github.ref_name }}"
+            echo "Branch pemicu: $TRIGGER_BRANCH"
+            
+            # 1. Pastikan folder tujuan ada, jika tidak, coba buat
+            if [ ! -d "$DEPLOY_PATH" ]; then
+              echo "Direktori $DEPLOY_PATH tidak ditemukan. Mencoba membuatnya..."
+              mkdir -p "$DEPLOY_PATH" 2>/dev/null
+              
+              if [ ! -d "$DEPLOY_PATH" ]; then
+                echo "Gagal membuat direktori dengan user biasa. Mencoba dengan sudo..."
+                echo "${{ secrets.VPS_PASSWORD }}" | sudo -S mkdir -p "$DEPLOY_PATH"
+                echo "${{ secrets.VPS_PASSWORD }}" | sudo -S chown -R $USER:$USER "$DEPLOY_PATH" 2>/dev/null || echo "${{ secrets.VPS_PASSWORD }}" | sudo -S chown -R $(whoami):$(whoami) "$DEPLOY_PATH"
+              fi
+            fi
+            
+            # Pastikan sekarang direktori ada dan masuk ke dalamnya
+            if [ -d "$DEPLOY_PATH" ]; then
+              cd "$DEPLOY_PATH"
+              echo "Berhasil masuk ke direktori: $(pwd)"
+            else
+              echo "Error: Gagal mengakses atau membuat direktori $DEPLOY_PATH!"
+              exit 1
+            fi
+            
+            # 2. Pastikan ini adalah repositori Git, jika tidak, lakukan inisialisasi
+            if [ ! -d ".git" ]; then
+              echo "Folder tidak mengandung repositori Git. Melakukan inisialisasi..."
+              git init
+              git remote add origin "https://github.com/${{ github.repository }}.git" || true
+            fi
+            
+            echo "Mengamankan remote URL menggunakan autotoken GitHub..."
+            git remote set-url origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+            
+            echo "3. Mengambil kode terbaru dari GitHub..."
+            git fetch origin "$TRIGGER_BRANCH"
+            
+            echo "4. Melakukan checkout dan reset hard ke branch $TRIGGER_BRANCH..."
+            git checkout -B "$TRIGGER_BRANCH" "origin/$TRIGGER_BRANCH"
+            git reset --hard "origin/$TRIGGER_BRANCH"
+            
+            echo "5. Menginstal dependensi NPM..."
+            npm install
+            
+            echo "6. Membangun aplikasi produksi (Vite)..."
+            npm run build
+            
+            echo "7. Mengatur ulang proses Node.js dengan PM2..."
+            # Cek apakah pm2 terinstal, jika tidak, pasang secara global
+            if ! command -v pm2 &> /dev/null; then
+              echo "PM2 tidak ditemukan! Menginstal pm2 secara global..."
+              npm install -g pm2 || echo "${{ secrets.VPS_PASSWORD }}" | sudo -S npm install -g pm2
+            fi
+            
+            # Cek apakah proses 'nurhealth' sudah terdaftar di PM2
+            if pm2 describe nurhealth > /dev/null 2>&1; then
+              echo "Proses 'nurhealth' ditemukan. Melakukan restart..."
+              NODE_ENV=production pm2 restart nurhealth
+            else
+              echo "Membuat proses baru 'nurhealth' di PM2..."
+              NODE_ENV=production pm2 start npm --name "nurhealth" -- start
+            fi
+            
+            # Menyimpan konfigurasi PM2
+            pm2 save || echo "${{ secrets.VPS_PASSWORD }}" | sudo -S pm2 save
+            
+            echo "=== DEPLOYMENT SELESAI DENGAN SUKSES ==="
