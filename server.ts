@@ -2,14 +2,40 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { GoogleGenAI } from "@google/genai";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const app = express();
 app.use(express.json());
 const PORT = Number(process.env.PORT) || 3000;
 
-const DEPLOYMENT_LOCATIONS = [];
+const SIM_API_BASE = process.env.SIM_API_URL || "https://sim.nurhealthconnection.com";
 
 async function startServer() {
+  // Proxy endpoint: fetch map data from public SIM API (avoids potential CORS issues)
+  app.get("/api/map-data", async (req, res) => {
+    try {
+      const response = await fetch(`${SIM_API_BASE}/api/public/map-data`, {
+        headers: {
+          "Accept": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("SIM API Error:", response.status, errorText);
+        throw new Error(`SIM API returned ${response.status}: ${errorText}`);
+      }
+
+      const data = await response.json();
+      res.json(data);
+    } catch (error: any) {
+      console.error("Map Data Proxy Error:", error.message);
+      res.status(502).json({ error: error.message });
+    }
+  });
+
   // API routes
   app.post("/api/chat", async (req, res) => {
     try {

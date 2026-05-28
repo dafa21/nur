@@ -642,11 +642,11 @@ function PatientList({ patients }: { patients: any[] }) {
                             <Calendar size={12} className="mr-1.5 text-slate-400" /> Rincian Rekam Medis Kunjungan
                           </span>
                           <span className={`px-2 py-0.5 rounded-lg border font-black uppercase text-[8px] tracking-wider flex items-center gap-1 ${
-                            currentVisit?.status === 'Lunas' 
+                            currentVisit?.status === 'Selesai' 
                               ? 'bg-emerald-50 border-emerald-100 text-emerald-700' 
                               : 'bg-amber-50 border-amber-250 text-amber-800'
                           }`}>
-                            <span className={`w-1 h-1 rounded-full ${currentVisit?.status === 'Lunas' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                            <span className={`w-1 h-1 rounded-full ${currentVisit?.status === 'Selesai' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
                             {currentVisit?.status}
                           </span>
                         </div>
@@ -715,12 +715,12 @@ function ClinicDetailModal({
   }, [groupedPatients, searchTerm]);
 
   // Group patients by status for stats
-  const paidPatients = patients.filter((p: any) => p.status === 'Lunas');
+  const paidPatients = patients.filter((p: any) => p.status === 'Selesai' || p.status === 'Lunas');
   const waitingPatients = patients.filter((p: any) => p.status === 'Menunggu');
 
   // Calculates rincian/detailed billing for a single patient
   const getPatientBillingDetail = (p: any) => {
-    if (p.status !== 'Lunas') {
+    if (p.status !== 'Selesai' && p.status !== 'Lunas') {
       return {
         base: 0,
         vitals: 0,
@@ -773,6 +773,17 @@ function ClinicDetailModal({
             </div>
             <h3 className="text-lg sm:text-xl font-display font-bold text-slate-800 leading-none">{location.name}</h3>
             <p className="text-xs text-slate-500 mt-1">{location.description}</p>
+            {location.sponsorName && (
+              <div className="flex items-center space-x-2 mt-2 bg-amber-50 px-2.5 py-1.5 rounded-lg border border-amber-100 w-fit">
+                {location.sponsorLogo && (
+                  <img src={location.sponsorLogo} alt={location.sponsorName} className="w-6 h-6 rounded object-contain bg-white p-0.5 border border-amber-200 shrink-0" />
+                )}
+                <div>
+                  <p className="text-[8px] font-bold text-amber-500 uppercase tracking-widest leading-none">Sponsor</p>
+                  <p className="text-[11px] font-bold text-slate-700 leading-tight">{location.sponsorName}</p>
+                </div>
+              </div>
+            )}
           </div>
           <button 
             onClick={onClose}
@@ -811,7 +822,7 @@ function ClinicDetailModal({
                 <CheckCircle2 size={16} />
               </div>
               <div className="min-w-0">
-                <p className="text-[9px] font-bold text-slate-400 uppercase leading-none mb-1 truncate">Lunas</p>
+                <p className="text-[9px] font-bold text-slate-400 uppercase leading-none mb-1 truncate">Selesai</p>
                 <p className="text-sm font-extrabold text-slate-800 leading-none">{paidPatients.length}</p>
               </div>
             </div>
@@ -875,7 +886,7 @@ function ClinicDetailModal({
                 <div className="border-b border-slate-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <h4 className="font-bold text-slate-800 text-sm flex items-center">
-                      <span>Rincian Pendapatan Kasir (Status Lunas)</span>
+                      <span>Rincian Pendapatan Kasir (Status Selesai)</span>
                     </h4>
                     <p className="text-[10px] text-slate-500 mt-0.5">Penetapan tarif real-time berdasarkan rekam tindakan klinik</p>
                   </div>
@@ -923,7 +934,7 @@ function ClinicDetailModal({
                                   <span className="font-bold text-slate-805 text-slate-800">{p.name}</span>
                                   <span className="text-[10px] text-slate-404 text-slate-400 ml-2">RM: {p.rm_number}</span>
                                 </div>
-                                <span className="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full font-bold text-[9px] uppercase tracking-wider shrink-0 font-bold border-none bg-none">Lunas</span>
+                                <span className="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full font-bold text-[9px] uppercase tracking-wider shrink-0 font-bold border-none bg-none">Selesai</span>
                               </div>
                               <div className="space-y-1 text-slate-500 text-[11px]">
                                 <div className="flex justify-between">
@@ -1035,7 +1046,7 @@ function ClinicDetailModal({
                                     Kunjungan #{p.visits.length - index}
                                   </span>
                                   <span className={`px-2 py-0.5 rounded-full text-[8px] font-bold uppercase ${
-                                    v.status === 'Lunas' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
+                                    (v.status === 'Selesai' || v.status === 'Lunas') ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
                                   }`}>
                                     {v.status}
                                   </span>
@@ -1225,6 +1236,8 @@ interface Location {
     communityImpact: string;
   };
   services?: string[];
+  sponsorName?: string;
+  sponsorLogo?: string;
   raw?: any;
 }
 
@@ -1265,7 +1278,14 @@ export function DeploymentMap() {
     setLoading(true);
 
     const loadData = async () => {
-      const res = await fetch('https://sim.nurhealthconnection.com/api/public/map-data');
+      // Try server-side proxy first (avoids CORS), then direct API call
+      let res = await fetch('/api/map-data');
+      
+      if (!res.ok) {
+        // Fallback: call SIM API directly
+        res = await fetch('https://sim.nurhealthconnection.com/api/public/map-data');
+      }
+      
       if (!res.ok) throw new Error('Fetch HTTP error ' + res.status);
       const data = await res.json();
       return data;
@@ -1273,46 +1293,35 @@ export function DeploymentMap() {
 
     loadData()
       .then((response: any) => {
-        // API response might be an array directly, or an object with a `data` property or a `locations` property
-        const locationsArray = Array.isArray(response) ? response : (response?.data || response?.locations);
+        // API response: { success: true, data: [...] }
+        const locationsArray = response?.data || (Array.isArray(response) ? response : response?.locations);
         
         if (locationsArray && Array.isArray(locationsArray)) {
           const mappedLocations: Location[] = locationsArray.map((clinic: any) => {
-            // Count actual patients with status "Lunas" and calculate their detailed fee
-            let calculatedRevenue = 0;
-            if (clinic.patients && clinic.patients.length > 0) {
-              clinic.patients.forEach((p: any) => {
-                if (p.status === 'Lunas') {
-                  let patientFee = 150000; // Base Consult Tariffs
-                  if (p.vitals && p.vitals.length > 0) {
-                    patientFee += 50000; // Vitals check
-                  }
-                  if (p.soaps && p.soaps.length > 0) {
-                    patientFee += 100000; // SOAP diagnostics and rekam medis
-                  }
-                  calculatedRevenue += patientFee;
-                }
-              });
-            }
-            // Use calculatedRevenue if clinic's revenue in API is 0, so it reflects actual patient transactions!
-            const finalRevenue = clinic.revenue > 0 ? clinic.revenue : calculatedRevenue;
+            // Use API-provided revenue directly (real-time from kasir)
+            const revenue = Number(clinic.revenue) || 0;
+            const patientCount = Number(clinic.patientCount) || clinic.patients?.length || 0;
 
             return {
               id: String(clinic.id),
-              name: clinic.name,
-              position: [clinic.latitude, clinic.longitude],
+              name: clinic.name || 'Klinik Nur Health',
+              position: [
+                Number(clinic.latitude || 0), 
+                Number(clinic.longitude || 0)
+              ],
               status: clinic.status === 'Active' ? 'active' : 'planned',
-              description: clinic.address,
+              description: clinic.address || '',
               stats: {
-                patientsServed: String(clinic.patientCount || clinic.patients?.length || 0),
-                servicesRate: `Rp ${finalRevenue.toLocaleString('id-ID')}`,
+                patientsServed: String(patientCount),
+                servicesRate: `Rp ${revenue.toLocaleString('id-ID')}`,
                 communityImpact: 'High'
               },
               services: [],
+              sponsorName: clinic.sponsor_name || '',
+              sponsorLogo: clinic.sponsor_logo || '',
               raw: {
                 ...clinic,
-                calculatedRevenue,
-                finalRevenue
+                revenue,
               }
             };
           });
@@ -1321,54 +1330,8 @@ export function DeploymentMap() {
         setLoading(false);
       })
       .catch(err => {
-        // Fallback static data if API is blocked by session / CORS
-        setLocations([
-          {
-            id: 'fallback-1',
-            name: 'Klinik Nur Health - Baduy Dalam',
-            description: 'Klinik Pedesaan Modular',
-            position: [-6.6212, 106.2415],
-            status: 'active',
-            stats: {
-              patientsServed: '142',
-              solarPower: '4.8 kWh',
-              uptime: '99%',
-              servicesRate: 'Rp 6.300.000',
-            },
-            services: ['Tele-consultation', 'Smart Dispensary', 'Basic Triage'],
-            raw: { address: 'Suku Baduy Dalam, Banten', patients: [] }
-          },
-          {
-            id: 'fallback-2',
-            name: 'Klinik Nur Health - NTT Timur',
-            description: 'Klinik Pedesaan Modular',
-            position: [-9.8895, 124.3056],
-            status: 'active',
-            stats: {
-              patientsServed: '320',
-              solarPower: '6.2 kWh',
-              uptime: '98%',
-              servicesRate: 'Rp 14.500.000',
-            },
-            services: ['Tele-consultation', 'Maternal Care', 'Smart Dispensary'],
-            raw: { address: 'Soe, Timor Tengah Selatan, NTT', patients: [] }
-          },
-          {
-             id: 'fallback-3',
-             name: 'Klinik Nur Health - Lombok Utara',
-             description: 'Klinik Pedesaan Modular',
-             position: [-8.3377, 116.2798],
-             status: 'active',
-             stats: {
-               patientsServed: '254',
-               solarPower: '5.5 kWh',
-               uptime: '97%',
-               servicesRate: 'Rp 9.250.000',
-             },
-             services: ['Tele-consultation', 'Basic Triage'],
-             raw: { address: 'Tanjung, Lombok Utara, NTB', patients: [] }
-          }
-        ]);
+        console.error('Map data fetch error:', err);
+        setLocations([]);
         setLoading(false);
       });
   }, [isInView]);
@@ -1579,6 +1542,27 @@ export function DeploymentMap() {
                   "{selectedHub.description}"
                 </p>
               </motion.div>
+
+              {/* Sponsor Badge */}
+              {selectedHub.sponsorName && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="flex items-center space-x-3 bg-gradient-to-r from-amber-50 to-orange-50 p-3 rounded-2xl border border-amber-100"
+                >
+                  {selectedHub.sponsorLogo && (
+                    <img 
+                      src={selectedHub.sponsorLogo} 
+                      alt={selectedHub.sponsorName}
+                      className="w-10 h-10 rounded-xl object-contain bg-white p-1 border border-amber-200 shadow-sm shrink-0"
+                    />
+                  )}
+                  <div>
+                    <p className="text-[9px] font-bold text-amber-500 uppercase tracking-widest leading-none mb-0.5">Didukung Oleh</p>
+                    <p className="text-xs font-bold text-slate-800 leading-tight">{selectedHub.sponsorName}</p>
+                  </div>
+                </motion.div>
+              )}
 
               {/* Weather Widget */}
               <WeatherWidget lat={selectedHub.position[0]} lng={selectedHub.position[1]} />
