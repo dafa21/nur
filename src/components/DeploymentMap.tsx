@@ -776,7 +776,7 @@ function ClinicDetailModal({
             {location.sponsorName && (
               <div className="flex items-center space-x-2 mt-2 bg-amber-50 px-2.5 py-1.5 rounded-lg border border-amber-100 w-fit">
                 {location.sponsorLogo && (
-                  <img src={location.sponsorLogo} alt={location.sponsorName} className="w-6 h-6 rounded object-contain bg-white p-0.5 border border-amber-200 shrink-0" />
+                  <img src={location.sponsorLogo} alt={location.sponsorName} className="w-auto h-auto max-h-8 max-w-[100px] rounded object-contain bg-white px-1.5 py-0.5 border border-amber-200 shrink-0" />
                 )}
                 <div>
                   <p className="text-[8px] font-bold text-amber-500 uppercase tracking-widest leading-none">Sponsor</p>
@@ -1566,7 +1566,7 @@ export function DeploymentMap() {
                     <img 
                       src={selectedHub.sponsorLogo} 
                       alt={selectedHub.sponsorName}
-                      className="w-10 h-10 rounded-xl object-contain bg-white p-1 border border-amber-200 shadow-sm shrink-0"
+                      className="w-auto h-auto max-h-12 max-w-[140px] rounded-lg object-contain bg-white px-2 py-1 border border-amber-200 shadow-sm shrink-0"
                     />
                   )}
                   <div>

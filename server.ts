@@ -2,6 +2,7 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import dotenv from "dotenv";
+import OpenAI from "openai";
 
 dotenv.config();
 
@@ -32,7 +33,6 @@ async function startServer() {
         throw new Error("NVIDIA_API_KEY belum dikonfigurasi di server.");
       }
 
-      const OpenAI = (await import("openai")).default;
       const openai = new OpenAI({
         apiKey,
         baseURL: "https://integrate.api.nvidia.com/v1",
@@ -94,10 +94,12 @@ FORMAT JAWABAN:
           ...chatHistory,
           { role: "user", content: message },
         ],
-        temperature: 0.7,
-        top_p: 0.9,
-        max_tokens: 16384,
+        temperature: 1,
+        top_p: 0.95,
+        max_tokens: 4096,
         stream: true,
+        // @ts-ignore
+        chat_template_kwargs: { thinking: false }
       });
 
       for await (const chunk of completion) {

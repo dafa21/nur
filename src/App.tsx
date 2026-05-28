@@ -108,9 +108,9 @@ export default function App() {
       <nav className="fixed w-full bg-white/80 backdrop-blur-md z-50 border-bottom border-slate-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
-            <div className="flex items-center space-x-2">
-              <img src="/nurr.png" alt="Nur Health Logo" className="h-10 w-auto object-contain" />
-              <span className="font-display text-xl font-bold tracking-tight text-slate-900">
+            <div className="flex items-center space-x-3">
+              <img src="/nurr.png" alt="Nur Health Logo" className="h-16 md:h-20 w-auto object-contain drop-shadow-sm" />
+              <span className="font-display text-2xl md:text-3xl font-bold tracking-tight text-slate-900">
                 NUR <span className="text-med-blue">Health</span>
               </span>
             </div>
@@ -545,9 +545,9 @@ export default function App() {
       <footer className="bg-slate-900 py-12 text-slate-500 text-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
            <div className="flex flex-col md:flex-row justify-between items-center">
-              <div className="flex items-center space-x-2 mb-6 md:mb-0">
-                <img src="/nurr.png" alt="NUR Health Logo" className="h-8 w-auto object-contain" />
-                <span className="font-display font-bold text-white text-lg lg:text-xl">NUR Health Connection</span>
+              <div className="flex items-center space-x-3 mb-6 md:mb-0">
+                <img src="/nurr.png" alt="NUR Health Logo" className="h-14 md:h-16 w-auto object-contain drop-shadow-md" />
+                <span className="font-display font-bold text-white text-xl lg:text-2xl tracking-wide">NUR Health Connection</span>
               </div>
               <div className="flex space-x-8 mb-6 md:mb-0">
                 <a href="#" className="hover:text-white transition-colors">Privacy Policy</a>
