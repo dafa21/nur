@@ -12,30 +12,19 @@ const PORT = Number(process.env.PORT) || 3000;
 const SIM_API_BASE = process.env.SIM_API_URL || "https://sim.nurhealthconnection.com";
 
 async function startServer() {
-  // Proxy endpoint: fetch map data from public SIM API (avoids potential CORS issues)
-  app.get("/api/map-data", async (req, res) => {
-    try {
-      const response = await fetch(`${SIM_API_BASE}/api/public/map-data`, {
-        headers: {
-          "Accept": "application/json",
-        },
-      });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("SIM API Error:", response.status, errorText);
-        throw new Error(`SIM API returned ${response.status}: ${errorText}`);
-      }
-
-      const data = await response.json();
-      res.json(data);
-    } catch (error: any) {
-      console.error("Map Data Proxy Error:", error.message);
-      res.status(502).json({ error: error.message });
+  // Middleware for CORS on API routes
+  app.use("/api", (req, res, next) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    if (req.method === "OPTIONS") {
+      return res.status(200).end();
     }
+    next();
   });
 
-  // AI Chat endpoint — DeepSeek V4 Pro via NVIDIA API
+  // AI Chat endpoint — DeepSeek V4 Pro via NVIDIA API (Streaming & CORS enabled)
   app.post("/api/chat", async (req, res) => {
     try {
       const apiKey = process.env.NVIDIA_API_KEY;
@@ -92,6 +81,12 @@ FORMAT JAWABAN:
         content: h.text,
       }));
 
+      // Setup Server-Sent Events headers
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.flushHeaders();
+
       const completion = await openai.chat.completions.create({
         model: "deepseek-ai/deepseek-v4-pro",
         messages: [
@@ -101,14 +96,27 @@ FORMAT JAWABAN:
         ],
         temperature: 0.7,
         top_p: 0.9,
-        max_tokens: 4096,
+        max_tokens: 16384,
+        stream: true,
       });
 
-      const aiText = completion.choices[0]?.message?.content || "Maaf, saya tidak dapat memproses permintaan Anda saat ini.";
-      res.json({ text: aiText });
+      for await (const chunk of completion) {
+        const text = chunk.choices[0]?.delta?.content || "";
+        if (text) {
+          res.write(`data: ${JSON.stringify({ text })}\n\n`);
+        }
+      }
+
+      res.write('data: [DONE]\n\n');
+      res.end();
     } catch (error: any) {
       console.error("AI Error:", error);
-      res.status(500).json({ error: error.message });
+      if (!res.headersSent) {
+        res.status(500).json({ error: error.message });
+      } else {
+        res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+        res.end();
+      }
     }
   });
 

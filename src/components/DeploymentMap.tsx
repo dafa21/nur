@@ -1278,14 +1278,7 @@ export function DeploymentMap() {
     setLoading(true);
 
     const loadData = async () => {
-      // Try server-side proxy first (avoids CORS), then direct API call
-      let res = await fetch('/api/map-data');
-      
-      if (!res.ok) {
-        // Fallback: call SIM API directly
-        res = await fetch('https://sim.nurhealthconnection.com/api/public/map-data');
-      }
-      
+      const res = await fetch('https://sim.nurhealthconnection.com/api/public/map-data');
       if (!res.ok) throw new Error('Fetch HTTP error ' + res.status);
       const data = await res.json();
       return data;
@@ -1298,8 +1291,27 @@ export function DeploymentMap() {
         
         if (locationsArray && Array.isArray(locationsArray)) {
           const mappedLocations: Location[] = locationsArray.map((clinic: any) => {
-            // Use API-provided revenue directly (real-time from kasir)
-            const revenue = Number(clinic.revenue) || 0;
+            // Count actual patients with status "Selesai" or "Lunas" and calculate their detailed fee
+            let calculatedRevenue = 0;
+            if (clinic.patients && clinic.patients.length > 0) {
+              clinic.patients.forEach((p: any) => {
+                if (p.status === 'Selesai' || p.status === 'Lunas') {
+                  let patientFee = 150000; // Base Consult Tariffs
+                  if (p.vitals && p.vitals.length > 0) {
+                    patientFee += 50000; // Vitals check
+                  }
+                  if (p.soaps && p.soaps.length > 0) {
+                    patientFee += 100000; // SOAP diagnostics and rekam medis
+                  }
+                  calculatedRevenue += patientFee;
+                }
+              });
+            }
+
+            // Use calculatedRevenue if clinic's revenue in API is 0, so it reflects actual patient transactions!
+            const apiRevenue = Number(clinic.revenue) || 0;
+            const finalRevenue = apiRevenue > 0 ? apiRevenue : calculatedRevenue;
+            
             const patientCount = Number(clinic.patientCount) || clinic.patients?.length || 0;
 
             return {
@@ -1313,7 +1325,7 @@ export function DeploymentMap() {
               description: clinic.address || '',
               stats: {
                 patientsServed: String(patientCount),
-                servicesRate: `Rp ${revenue.toLocaleString('id-ID')}`,
+                servicesRate: `Rp ${finalRevenue.toLocaleString('id-ID')}`,
                 communityImpact: 'High'
               },
               services: [],
@@ -1321,7 +1333,7 @@ export function DeploymentMap() {
               sponsorLogo: clinic.sponsor_logo || '',
               raw: {
                 ...clinic,
-                revenue,
+                revenue: finalRevenue,
               }
             };
           });

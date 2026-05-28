@@ -59,12 +59,9 @@ export function AIAssistantWidget() {
     setIsLoading(true);
 
     try {
-      // Exclude the very last message from history since we send it separately,
-      // actually, our backend expects the message to be separate.
-      // So history is all previous messages.
       const historyRes = messages.map(m => ({ role: m.role, text: m.text }));
       
-      const res = await fetch('/api/chat', {
+      const res = await fetch(import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api/chat` : '/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -79,12 +76,46 @@ export function AIAssistantWidget() {
         throw new Error('Gagal menghubungi AI Server');
       }
 
-      const data = await res.json();
-      setMessages(prev => [...prev, { role: 'model', text: data.text }]);
+      // Add empty AI message placeholder for streaming
+      setMessages(prev => [...prev, { role: 'model', text: '' }]);
+      setIsLoading(false); // Hide loading dots once stream starts
+
+      const reader = res.body?.getReader();
+      const decoder = new TextDecoder();
+      let aiText = '';
+
+      if (reader) {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n');
+          
+          for (const line of lines) {
+            if (line.startsWith('data: ') && !line.includes('[DONE]')) {
+              try {
+                const data = JSON.parse(line.replace('data: ', ''));
+                if (data.text) {
+                  aiText += data.text;
+                  setMessages(prev => {
+                    const newMessages = [...prev];
+                    newMessages[newMessages.length - 1].text = aiText;
+                    return newMessages;
+                  });
+                } else if (data.error) {
+                   console.error("AI Stream Error:", data.error);
+                }
+              } catch (e) {
+                // Handle incomplete JSON chunks if any
+              }
+            }
+          }
+        }
+      }
     } catch (error) {
       console.error(error);
       setMessages(prev => [...prev, { role: 'model', text: 'Maaf, terjadi kesalahan saat menghubungi server kami. Mohon coba lagi nanti.' }]);
-    } finally {
       setIsLoading(false);
     }
   };
