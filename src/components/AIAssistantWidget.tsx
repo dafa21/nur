@@ -10,7 +10,8 @@ interface Message {
 
 const NVIDIA_API_KEY = import.meta.env.VITE_NVIDIA_API_KEY || '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';
 const NVIDIA_MODEL = 'meta/llama-3.2-90b-vision-instruct';
-const NVIDIA_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
+// Cloudflare Worker proxy — solves CORS issue for browser calls
+const NVIDIA_URL = 'https://fancy-credit-0365.dafa394.workers.dev';
 
 const SYSTEM_PROMPT = `Kamu adalah NUR Health AI, sebuah Asisten Medis Virtual Cerdas bertenaga AI yang diciptakan oleh LAZNAS Dewan Dakwah untuk NUR Health Hub.
 
