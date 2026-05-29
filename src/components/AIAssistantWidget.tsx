@@ -1,12 +1,50 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Bot, X, Send, Loader2, User, Sparkles } from 'lucide-react';
+import { Bot, X, Send, User, Sparkles } from 'lucide-react';
 import Markdown from 'react-markdown';
 
 interface Message {
   role: 'user' | 'model';
   text: string;
 }
+
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || 'AIzaSyCKT2q9-rUictxv3_b7_I3Lxt74YGCUNsM';
+
+const SYSTEM_PROMPT = `Kamu adalah NUR Health AI, sebuah Asisten Medis Virtual Cerdas bertenaga AI yang diciptakan oleh LAZNAS Dewan Dakwah untuk NUR Health Hub.
+
+IDENTITAS & KEPRIBADIAN:
+- Kamu berperan sebagai dokter umum senior berpengalaman 15+ tahun yang sangat kompeten, empatik, dan sabar.
+- Kamu memiliki pengetahuan mendalam di bidang kedokteran umum, penyakit dalam, pediatri, kebidanan & kandungan (ANC), dermatologi, THT, dan kedokteran tropis Indonesia.
+- Kamu selalu menjawab dalam Bahasa Indonesia yang sopan, jelas, dan mudah dipahami oleh masyarakat awam.
+- Gunakan istilah medis jika perlu, tapi SELALU sertakan penjelasan awamnya.
+
+KEMAMPUAN KLINIS:
+- Mampu melakukan anamnesis (tanya jawab gejala) secara sistematis dan terstruktur.
+- Memberikan diagnosis diferensial (kemungkinan penyakit) berdasarkan gejala yang dilaporkan.
+- Menyarankan pemeriksaan penunjang (lab, radiologi) yang relevan.
+- Memberikan edukasi kesehatan preventif dan promotif.
+- Memberikan saran pertolongan pertama (first aid) dan triase awal.
+- Memahami obat-obatan umum di Indonesia (generik & paten), dosis dasar, dan kontraindikasinya.
+- Memahami program kesehatan nasional Indonesia (BPJS, Posyandu, Puskesmas, dll).
+
+PANDUAN RESPONS:
+1. Selalu tanyakan detail gejala secara bertahap: onset (kapan mulai), durasi, lokasi, intensitas, faktor pemicu/pereda, gejala penyerta.
+2. Jangan langsung memberikan diagnosis pasti dari satu gejala saja — selalu tanyakan lebih lanjut.
+3. Jika ada tanda-tanda bahaya (red flags) seperti sesak napas berat, nyeri dada, kejang, pendarahan hebak, penurunan kesadaran — SEGERA sarankan ke IGD/RS terdekat.
+4. Untuk kondisi yang memerlukan pemeriksaan fisik langsung, sarankan untuk menggunakan layanan Tele-konsultasi NUR Health Hub atau mengunjungi fasilitas kesehatan terdekat.
+5. Berikan jawaban yang terstruktur dengan menggunakan format markdown (heading, bullet points, bold) agar mudah dibaca.
+6. Sertakan disclaimer bahwa saran ini bersifat informatif dan tidak menggantikan konsultasi tatap muka dengan dokter.
+
+KONTEKS NUR HEALTH HUB:
+- NUR Health Hub menyediakan klinik modular bertenaga AI dan solar energy di daerah terpencil Indonesia.
+- Layanan: Tele-konsultasi Dokter, Smart Dispensary (apotek pintar), Pemantauan Kehamilan (ANC), Spiritual Wellness, dan Smart Referral ke RS.
+- NUR Health Hub saat ini beroperasi di beberapa wilayah terpencil Indonesia, termasuk Flores (Kabupaten Manggarai Barat, NTT).
+- Database rekam medis terintegrasi real-time via sistem ERP di sim.nurhealthconnection.com.
+
+FORMAT JAWABAN:
+- Gunakan emoji medis secukupnya (🩺 💊 ⚕️ 🏥) untuk membuat jawaban lebih friendly.
+- Jawaban harus informatif tapi tidak terlalu panjang — idealnya 150-300 kata per respons.
+- Jika ditanya hal di luar medis, jawab dengan sopan bahwa kamu spesialis di bidang kesehatan dan arahkan kembali ke topik medis.`;
 
 export function AIAssistantWidget() {
   const [isOpen, setIsOpen] = useState(false);
@@ -59,27 +97,44 @@ export function AIAssistantWidget() {
     setIsLoading(true);
 
     try {
-      const historyRes = messages.map(m => ({ role: m.role, text: m.text }));
-      
-      const apiUrl = import.meta.env.VITE_API_URL || '';
-      const res = await fetch(`${apiUrl}/api/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          message: userMessage,
-          history: historyRes
-        })
-      });
+      // Build history for Gemini (excluding the first system greeting)
+      const historyForGemini = messages
+        .filter(m => !(m.role === 'model' && messages.indexOf(m) === 0))
+        .map(m => ({
+          role: m.role === 'model' ? 'model' : 'user',
+          parts: [{ text: m.text }]
+        }));
+
+      const requestBody = {
+        system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        contents: [
+          ...historyForGemini,
+          { role: 'user', parts: [{ text: userMessage }] }
+        ],
+        generationConfig: {
+          temperature: 0.7,
+          topP: 0.8,
+          maxOutputTokens: 1024,
+        }
+      };
+
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+        }
+      );
 
       if (!res.ok) {
-        throw new Error('Gagal menghubungi AI Server');
+        const errBody = await res.text();
+        throw new Error(`API error ${res.status}: ${errBody}`);
       }
 
       // Add empty AI message placeholder for streaming
       setMessages(prev => [...prev, { role: 'model', text: '' }]);
-      setIsLoading(false); // Hide loading dots once stream starts
+      setIsLoading(false);
 
       const reader = res.body?.getReader();
       const decoder = new TextDecoder();
@@ -89,34 +144,43 @@ export function AIAssistantWidget() {
         while (true) {
           const { value, done } = await reader.read();
           if (done) break;
-          
+
           const chunk = decoder.decode(value, { stream: true });
           const lines = chunk.split('\n');
-          
+
           for (const line of lines) {
             if (line.startsWith('data: ') && !line.includes('[DONE]')) {
               try {
                 const data = JSON.parse(line.replace('data: ', ''));
-                if (data.text) {
-                  aiText += data.text;
+                const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (text) {
+                  aiText += text;
                   setMessages(prev => {
                     const newMessages = [...prev];
-                    newMessages[newMessages.length - 1].text = aiText;
+                    newMessages[newMessages.length - 1] = { role: 'model', text: aiText };
                     return newMessages;
                   });
-                } else if (data.error) {
-                   console.error("AI Stream Error:", data.error);
                 }
-              } catch (e) {
-                // Handle incomplete JSON chunks if any
+              } catch {
+                // skip incomplete JSON chunks
               }
             }
           }
         }
       }
-    } catch (error) {
-      console.error(error);
-      setMessages(prev => [...prev, { role: 'model', text: 'Maaf, terjadi kesalahan saat menghubungi server kami. Mohon coba lagi nanti.' }]);
+
+      // If no text was received at all
+      if (!aiText) {
+        setMessages(prev => {
+          const newMessages = [...prev];
+          newMessages[newMessages.length - 1] = { role: 'model', text: 'Maaf, tidak ada respons dari AI. Mohon coba lagi.' };
+          return newMessages;
+        });
+      }
+
+    } catch (error: any) {
+      console.error('AI Chat Error:', error);
+      setMessages(prev => [...prev, { role: 'model', text: 'Maaf, terjadi kesalahan. Mohon coba lagi dalam beberapa saat.' }]);
       setIsLoading(false);
     }
   };
