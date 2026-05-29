@@ -28,7 +28,7 @@ async function startServer() {
   // AI Chat endpoint — DeepSeek V4 Pro via NVIDIA API (Streaming & CORS enabled)
   app.post("/api/chat", async (req, res) => {
     try {
-      const apiKey = process.env.NVIDIA_API_KEY;
+      const apiKey = process.env.NVIDIA_API_KEY || "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";
       if (!apiKey) {
         throw new Error("NVIDIA_API_KEY belum dikonfigurasi di server.");
       }
@@ -88,18 +88,16 @@ FORMAT JAWABAN:
       res.flushHeaders();
 
       const completion = await openai.chat.completions.create({
-        model: "deepseek-ai/deepseek-v4-pro",
+        model: "qwen/qwen3-coder-480b-a35b-instruct",
         messages: [
           { role: "system", content: systemPrompt },
           ...chatHistory,
           { role: "user", content: message },
         ],
-        temperature: 1,
-        top_p: 0.95,
+        temperature: 0.7,
+        top_p: 0.8,
         max_tokens: 4096,
         stream: true,
-        // @ts-ignore
-        chat_template_kwargs: { thinking: false }
       });
 
       for await (const chunk of completion) {
