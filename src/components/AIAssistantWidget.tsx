@@ -8,9 +8,8 @@ interface Message {
   text: string;
 }
 
-const NVIDIA_API_KEY = import.meta.env.VITE_NVIDIA_API_KEY || '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';
-const NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1';
-const MODEL = 'qwen/qwen3-coder-480b-a35b-instruct';
+// Gemini API — works directly from browser without backend
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || 'AIzaSyCKT2q9-rUictxv3_b7_I3Lxt74YGCUNsM';
 
 const SYSTEM_PROMPT = `Kamu adalah NUR Health AI, sebuah Asisten Medis Virtual Cerdas bertenaga AI yang diciptakan oleh LAZNAS Dewan Dakwah untuk NUR Health Hub.
 
@@ -40,12 +39,13 @@ PANDUAN RESPONS:
 KONTEKS NUR HEALTH HUB:
 - NUR Health Hub menyediakan klinik modular bertenaga AI dan solar energy di daerah terpencil Indonesia.
 - Layanan: Tele-konsultasi Dokter, Smart Dispensary (apotek pintar), Pemantauan Kehamilan (ANC), Spiritual Wellness, dan Smart Referral ke RS.
-- NUR Health Hub saat ini beroperasi di beberapa wilayah terpencil Indonesia, termasuk Flores (Kabupaten Manggarai Barat, NTT).
+- NUR Health Hub saat ini beroperasi di wilayah terpencil Indonesia, termasuk Flores (Kabupaten Manggarai Barat, NTT).
+- Database rekam medis terintegrasi via sistem ERP di sim.nurhealthconnection.com.
 
 FORMAT JAWABAN:
 - Gunakan emoji medis secukupnya (🩺 💊 ⚕️ 🏥) untuk membuat jawaban lebih friendly.
-- Jawaban harus informatif tapi tidak terlalu panjang — idealnya 150-300 kata per respons.
-- Jika ditanya hal di luar medis, jawab dengan sopan bahwa kamu spesialis di bidang kesehatan.`;
+- Jawaban informatif tapi tidak terlalu panjang — idealnya 150-300 kata per respons.
+- Jika ditanya hal di luar medis, jawab sopan bahwa kamu spesialis di bidang kesehatan.`;
 
 export function AIAssistantWidget() {
   const [isOpen, setIsOpen] = useState(false);
@@ -98,47 +98,48 @@ export function AIAssistantWidget() {
     setIsLoading(true);
 
     try {
-      // Build OpenAI-compatible messages array
-      const chatMessages = [
-        { role: 'system', content: SYSTEM_PROMPT },
-        // Convert history (skip first greeting message)
-        ...messages.slice(1).map(m => ({
-          role: m.role === 'model' ? 'assistant' : 'user',
-          content: m.text,
-        })),
-        { role: 'user', content: userMessage },
-      ];
+      // Build Gemini conversation history (skip first greeting)
+      const historyContents = messages
+        .slice(1)
+        .map(m => ({
+          role: m.role === 'model' ? 'model' : 'user',
+          parts: [{ text: m.text }],
+        }));
 
-      const res = await fetch(`${NVIDIA_BASE_URL}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${NVIDIA_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: MODEL,
-          messages: chatMessages,
+      const requestBody = {
+        system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        contents: [
+          ...historyContents,
+          { role: 'user', parts: [{ text: userMessage }] },
+        ],
+        generationConfig: {
           temperature: 0.7,
-          top_p: 0.8,
-          max_tokens: 1024,
-          stream: true,
-        }),
-      });
+          topP: 0.8,
+          maxOutputTokens: 1024,
+        },
+      };
+
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+        }
+      );
 
       if (!res.ok) {
         const errText = await res.text();
-        throw new Error(`API error ${res.status}: ${errText}`);
+        throw new Error(`API ${res.status}: ${errText.substring(0, 200)}`);
       }
 
-      // Add empty AI message placeholder for streaming
+      // Add empty AI message for streaming
       setMessages(prev => [...prev, { role: 'model', text: '' }]);
       setIsLoading(false);
 
       const reader = res.body?.getReader();
       const decoder = new TextDecoder();
       let aiText = '';
-      let insideThink = false;
-      let thinkBuffer = '';
 
       if (reader) {
         while (true) {
@@ -151,79 +152,40 @@ export function AIAssistantWidget() {
           for (const line of lines) {
             if (!line.startsWith('data: ')) continue;
             const payload = line.replace('data: ', '').trim();
-            if (payload === '[DONE]') break;
+            if (!payload || payload === '[DONE]') continue;
 
             try {
               const data = JSON.parse(payload);
-              const rawText = data?.choices?.[0]?.delta?.content || '';
-              if (!rawText) continue;
-
-              // Filter out <think>...</think> blocks from Qwen3
-              thinkBuffer += rawText;
-              let output = '';
-              let remaining = thinkBuffer;
-
-              while (remaining.length > 0) {
-                if (insideThink) {
-                  const endIdx = remaining.indexOf('</think>');
-                  if (endIdx !== -1) {
-                    insideThink = false;
-                    remaining = remaining.slice(endIdx + 8);
-                  } else {
-                    break;
-                  }
-                } else {
-                  const startIdx = remaining.indexOf('<think>');
-                  if (startIdx !== -1) {
-                    output += remaining.slice(0, startIdx);
-                    insideThink = true;
-                    remaining = remaining.slice(startIdx + 7);
-                  } else {
-                    output += remaining;
-                    remaining = '';
-                    break;
-                  }
-                }
-              }
-
-              thinkBuffer = remaining;
-
-              if (output) {
-                aiText += output;
+              const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+              if (text) {
+                aiText += text;
                 setMessages(prev => {
-                  const newMessages = [...prev];
-                  newMessages[newMessages.length - 1] = { role: 'model', text: aiText };
-                  return newMessages;
+                  const updated = [...prev];
+                  updated[updated.length - 1] = { role: 'model', text: aiText };
+                  return updated;
                 });
               }
             } catch {
-              // skip incomplete JSON
+              // skip malformed chunks
             }
           }
         }
       }
 
-      // Flush remaining non-think buffer
-      if (thinkBuffer && !insideThink) {
-        aiText += thinkBuffer;
-        setMessages(prev => {
-          const newMessages = [...prev];
-          newMessages[newMessages.length - 1] = { role: 'model', text: aiText };
-          return newMessages;
-        });
-      }
-
       if (!aiText) {
         setMessages(prev => {
-          const newMessages = [...prev];
-          newMessages[newMessages.length - 1] = { role: 'model', text: 'Maaf, tidak ada respons dari AI. Mohon coba lagi.' };
-          return newMessages;
+          const updated = [...prev];
+          updated[updated.length - 1] = { role: 'model', text: 'Maaf, tidak ada respons. Silakan coba lagi.' };
+          return updated;
         });
       }
 
     } catch (error: any) {
-      console.error('AI Chat Error:', error);
-      setMessages(prev => [...prev, { role: 'model', text: `Maaf, terjadi kesalahan: ${error.message}. Mohon coba lagi.` }]);
+      console.error('AI Error:', error);
+      setMessages(prev => {
+        const withoutLoading = prev.filter((_, i) => !(i === prev.length - 1 && prev[prev.length - 1].text === ''));
+        return [...withoutLoading, { role: 'model', text: 'Maaf, terjadi kesalahan. Mohon coba lagi.' }];
+      });
       setIsLoading(false);
     }
   };
@@ -256,11 +218,11 @@ export function AIAssistantWidget() {
             initial={{ opacity: 0, y: 20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            transition={{ type: "spring", duration: 0.5, bounce: 0.3 }}
+            transition={{ type: 'spring', duration: 0.5, bounce: 0.3 }}
             className="fixed bottom-24 left-4 right-4 sm:bottom-28 sm:left-8 sm:right-auto z-[1000] w-auto sm:w-[400px] bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 flex flex-col h-[500px] max-h-[calc(100vh-120px)] sm:max-h-[calc(100vh-140px)]"
           >
             {/* Header */}
-            <div className="bg-gradient-to-r from-med-blue to-blue-600 p-4 flex items-center justify-between text-white shadow-md relative z-10">
+            <div className="bg-gradient-to-r from-med-blue to-blue-600 p-4 flex items-center justify-between text-white shadow-md">
               <div className="flex items-center space-x-3">
                 <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center">
                   <Sparkles size={20} className="text-blue-100" />
@@ -271,21 +233,10 @@ export function AIAssistantWidget() {
                 </div>
               </div>
               <div className="flex items-center space-x-2">
-                <button
-                  onClick={handleReset}
-                  className="w-8 h-8 flex items-center justify-center hover:bg-white/20 rounded-full transition-colors"
-                  title="Reset Percakapan"
-                  aria-label="Reset Chat"
-                >
-                  <motion.div whileHover={{ rotate: 90 }}>
-                    <Sparkles size={18} />
-                  </motion.div>
+                <button onClick={handleReset} className="w-8 h-8 flex items-center justify-center hover:bg-white/20 rounded-full transition-colors" title="Reset Percakapan" aria-label="Reset Chat">
+                  <motion.div whileHover={{ rotate: 90 }}><Sparkles size={18} /></motion.div>
                 </button>
-                <button
-                  onClick={() => setIsOpen(false)}
-                  className="w-8 h-8 flex items-center justify-center hover:bg-white/20 rounded-full transition-colors"
-                  aria-label="Tutup Chat"
-                >
+                <button onClick={() => setIsOpen(false)} className="w-8 h-8 flex items-center justify-center hover:bg-white/20 rounded-full transition-colors" aria-label="Tutup Chat">
                   <X size={20} />
                 </button>
               </div>
@@ -294,27 +245,14 @@ export function AIAssistantWidget() {
             {/* Chat Area */}
             <div className="flex-1 overflow-y-auto p-4 bg-slate-50 space-y-4">
               {messages.map((message, index) => (
-                <div
-                  key={index}
-                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
+                <div key={index} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div className={`flex max-w-[85%] ${message.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
                     <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center mt-1 ${message.role === 'user' ? 'bg-slate-200 ml-2' : 'bg-med-blue mr-2'}`}>
                       {message.role === 'user' ? <User size={16} className="text-slate-600" /> : <Bot size={16} className="text-white" />}
                     </div>
-                    <div
-                      className={`px-4 py-3 rounded-2xl ${
-                        message.role === 'user'
-                          ? 'bg-slate-900 text-white rounded-tr-sm'
-                          : 'bg-white text-slate-700 border border-slate-200 shadow-sm rounded-tl-sm'
-                      }`}
-                    >
+                    <div className={`px-4 py-3 rounded-2xl ${message.role === 'user' ? 'bg-slate-900 text-white rounded-tr-sm' : 'bg-white text-slate-700 border border-slate-200 shadow-sm rounded-tl-sm'}`}>
                       <div className="text-sm font-light leading-relaxed markdown-body">
-                        {message.role === 'model' ? (
-                          <Markdown>{message.text}</Markdown>
-                        ) : (
-                          message.text
-                        )}
+                        {message.role === 'model' ? <Markdown>{message.text}</Markdown> : message.text}
                       </div>
                     </div>
                   </div>
@@ -338,7 +276,7 @@ export function AIAssistantWidget() {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input Area */}
+            {/* Input */}
             <div className="p-3 bg-white border-t border-slate-100">
               <form onSubmit={handleSubmit} className="flex items-end space-x-2 relative">
                 <input
