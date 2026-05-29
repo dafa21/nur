@@ -8,7 +8,9 @@ interface Message {
   text: string;
 }
 
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || 'AIzaSyCKT2q9-rUictxv3_b7_I3Lxt74YGCUNsM';
+const NVIDIA_API_KEY = import.meta.env.VITE_NVIDIA_API_KEY || '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';
+const NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1';
+const MODEL = 'qwen/qwen3-coder-480b-a35b-instruct';
 
 const SYSTEM_PROMPT = `Kamu adalah NUR Health AI, sebuah Asisten Medis Virtual Cerdas bertenaga AI yang diciptakan oleh LAZNAS Dewan Dakwah untuk NUR Health Hub.
 
@@ -30,21 +32,20 @@ KEMAMPUAN KLINIS:
 PANDUAN RESPONS:
 1. Selalu tanyakan detail gejala secara bertahap: onset (kapan mulai), durasi, lokasi, intensitas, faktor pemicu/pereda, gejala penyerta.
 2. Jangan langsung memberikan diagnosis pasti dari satu gejala saja — selalu tanyakan lebih lanjut.
-3. Jika ada tanda-tanda bahaya (red flags) seperti sesak napas berat, nyeri dada, kejang, pendarahan hebak, penurunan kesadaran — SEGERA sarankan ke IGD/RS terdekat.
-4. Untuk kondisi yang memerlukan pemeriksaan fisik langsung, sarankan untuk menggunakan layanan Tele-konsultasi NUR Health Hub atau mengunjungi fasilitas kesehatan terdekat.
-5. Berikan jawaban yang terstruktur dengan menggunakan format markdown (heading, bullet points, bold) agar mudah dibaca.
+3. Jika ada tanda-tanda bahaya seperti sesak napas berat, nyeri dada, kejang, pendarahan hebat, penurunan kesadaran — SEGERA sarankan ke IGD/RS terdekat.
+4. Untuk kondisi yang memerlukan pemeriksaan fisik langsung, sarankan layanan Tele-konsultasi NUR Health Hub atau fasilitas kesehatan terdekat.
+5. Berikan jawaban terstruktur dengan format markdown (heading, bullet points, bold).
 6. Sertakan disclaimer bahwa saran ini bersifat informatif dan tidak menggantikan konsultasi tatap muka dengan dokter.
 
 KONTEKS NUR HEALTH HUB:
 - NUR Health Hub menyediakan klinik modular bertenaga AI dan solar energy di daerah terpencil Indonesia.
 - Layanan: Tele-konsultasi Dokter, Smart Dispensary (apotek pintar), Pemantauan Kehamilan (ANC), Spiritual Wellness, dan Smart Referral ke RS.
 - NUR Health Hub saat ini beroperasi di beberapa wilayah terpencil Indonesia, termasuk Flores (Kabupaten Manggarai Barat, NTT).
-- Database rekam medis terintegrasi real-time via sistem ERP di sim.nurhealthconnection.com.
 
 FORMAT JAWABAN:
 - Gunakan emoji medis secukupnya (🩺 💊 ⚕️ 🏥) untuk membuat jawaban lebih friendly.
 - Jawaban harus informatif tapi tidak terlalu panjang — idealnya 150-300 kata per respons.
-- Jika ditanya hal di luar medis, jawab dengan sopan bahwa kamu spesialis di bidang kesehatan dan arahkan kembali ke topik medis.`;
+- Jika ditanya hal di luar medis, jawab dengan sopan bahwa kamu spesialis di bidang kesehatan.`;
 
 export function AIAssistantWidget() {
   const [isOpen, setIsOpen] = useState(false);
@@ -97,39 +98,36 @@ export function AIAssistantWidget() {
     setIsLoading(true);
 
     try {
-      // Build history for Gemini (excluding the first system greeting)
-      const historyForGemini = messages
-        .filter(m => !(m.role === 'model' && messages.indexOf(m) === 0))
-        .map(m => ({
-          role: m.role === 'model' ? 'model' : 'user',
-          parts: [{ text: m.text }]
-        }));
+      // Build OpenAI-compatible messages array
+      const chatMessages = [
+        { role: 'system', content: SYSTEM_PROMPT },
+        // Convert history (skip first greeting message)
+        ...messages.slice(1).map(m => ({
+          role: m.role === 'model' ? 'assistant' : 'user',
+          content: m.text,
+        })),
+        { role: 'user', content: userMessage },
+      ];
 
-      const requestBody = {
-        system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-        contents: [
-          ...historyForGemini,
-          { role: 'user', parts: [{ text: userMessage }] }
-        ],
-        generationConfig: {
+      const res = await fetch(`${NVIDIA_BASE_URL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${NVIDIA_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          messages: chatMessages,
           temperature: 0.7,
-          topP: 0.8,
-          maxOutputTokens: 1024,
-        }
-      };
-
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(requestBody),
-        }
-      );
+          top_p: 0.8,
+          max_tokens: 1024,
+          stream: true,
+        }),
+      });
 
       if (!res.ok) {
-        const errBody = await res.text();
-        throw new Error(`API error ${res.status}: ${errBody}`);
+        const errText = await res.text();
+        throw new Error(`API error ${res.status}: ${errText}`);
       }
 
       // Add empty AI message placeholder for streaming
@@ -139,6 +137,8 @@ export function AIAssistantWidget() {
       const reader = res.body?.getReader();
       const decoder = new TextDecoder();
       let aiText = '';
+      let insideThink = false;
+      let thinkBuffer = '';
 
       if (reader) {
         while (true) {
@@ -149,27 +149,70 @@ export function AIAssistantWidget() {
           const lines = chunk.split('\n');
 
           for (const line of lines) {
-            if (line.startsWith('data: ') && !line.includes('[DONE]')) {
-              try {
-                const data = JSON.parse(line.replace('data: ', ''));
-                const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-                if (text) {
-                  aiText += text;
-                  setMessages(prev => {
-                    const newMessages = [...prev];
-                    newMessages[newMessages.length - 1] = { role: 'model', text: aiText };
-                    return newMessages;
-                  });
+            if (!line.startsWith('data: ')) continue;
+            const payload = line.replace('data: ', '').trim();
+            if (payload === '[DONE]') break;
+
+            try {
+              const data = JSON.parse(payload);
+              const rawText = data?.choices?.[0]?.delta?.content || '';
+              if (!rawText) continue;
+
+              // Filter out <think>...</think> blocks from Qwen3
+              thinkBuffer += rawText;
+              let output = '';
+              let remaining = thinkBuffer;
+
+              while (remaining.length > 0) {
+                if (insideThink) {
+                  const endIdx = remaining.indexOf('</think>');
+                  if (endIdx !== -1) {
+                    insideThink = false;
+                    remaining = remaining.slice(endIdx + 8);
+                  } else {
+                    break;
+                  }
+                } else {
+                  const startIdx = remaining.indexOf('<think>');
+                  if (startIdx !== -1) {
+                    output += remaining.slice(0, startIdx);
+                    insideThink = true;
+                    remaining = remaining.slice(startIdx + 7);
+                  } else {
+                    output += remaining;
+                    remaining = '';
+                    break;
+                  }
                 }
-              } catch {
-                // skip incomplete JSON chunks
               }
+
+              thinkBuffer = remaining;
+
+              if (output) {
+                aiText += output;
+                setMessages(prev => {
+                  const newMessages = [...prev];
+                  newMessages[newMessages.length - 1] = { role: 'model', text: aiText };
+                  return newMessages;
+                });
+              }
+            } catch {
+              // skip incomplete JSON
             }
           }
         }
       }
 
-      // If no text was received at all
+      // Flush remaining non-think buffer
+      if (thinkBuffer && !insideThink) {
+        aiText += thinkBuffer;
+        setMessages(prev => {
+          const newMessages = [...prev];
+          newMessages[newMessages.length - 1] = { role: 'model', text: aiText };
+          return newMessages;
+        });
+      }
+
       if (!aiText) {
         setMessages(prev => {
           const newMessages = [...prev];
@@ -180,7 +223,7 @@ export function AIAssistantWidget() {
 
     } catch (error: any) {
       console.error('AI Chat Error:', error);
-      setMessages(prev => [...prev, { role: 'model', text: 'Maaf, terjadi kesalahan. Mohon coba lagi dalam beberapa saat.' }]);
+      setMessages(prev => [...prev, { role: 'model', text: `Maaf, terjadi kesalahan: ${error.message}. Mohon coba lagi.` }]);
       setIsLoading(false);
     }
   };
@@ -199,14 +242,10 @@ export function AIAssistantWidget() {
           className="flex items-center justify-center w-16 h-16 bg-med-blue text-white rounded-full shadow-2xl hover:bg-blue-700 transition-colors group relative border-4 border-white"
           aria-label="Tanya AI Assistant"
         >
-          {/* Tooltip */}
           <span className="absolute left-full ml-4 px-3 py-2 bg-white text-slate-800 text-xs font-bold rounded-xl shadow-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap border border-slate-100 pointer-events-none">
             Tanya AI Dokter
           </span>
-          
           {isOpen ? <X size={28} /> : <Bot size={28} />}
-          
-          {/* Pulse effect when closed */}
           {!isOpen && <span className="absolute inset-0 rounded-full bg-med-blue opacity-20 animate-ping pointer-events-none" />}
         </button>
       </motion.div>
@@ -234,7 +273,7 @@ export function AIAssistantWidget() {
               <div className="flex items-center space-x-2">
                 <button
                   onClick={handleReset}
-                  className="w-8 h-8 flex items-center justify-center hover:bg-white/20 rounded-full transition-colors group relative"
+                  className="w-8 h-8 flex items-center justify-center hover:bg-white/20 rounded-full transition-colors"
                   title="Reset Percakapan"
                   aria-label="Reset Chat"
                 >
@@ -242,7 +281,7 @@ export function AIAssistantWidget() {
                     <Sparkles size={18} />
                   </motion.div>
                 </button>
-                <button 
+                <button
                   onClick={() => setIsOpen(false)}
                   className="w-8 h-8 flex items-center justify-center hover:bg-white/20 rounded-full transition-colors"
                   aria-label="Tutup Chat"
@@ -255,18 +294,18 @@ export function AIAssistantWidget() {
             {/* Chat Area */}
             <div className="flex-1 overflow-y-auto p-4 bg-slate-50 space-y-4">
               {messages.map((message, index) => (
-                <div 
-                  key={index} 
+                <div
+                  key={index}
                   className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div className={`flex max-w-[85%] ${message.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
                     <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center mt-1 ${message.role === 'user' ? 'bg-slate-200 ml-2' : 'bg-med-blue mr-2'}`}>
-                      {message.role === 'user' ? <User size={16} className="text-slate-600"/> : <Bot size={16} className="text-white"/>}
+                      {message.role === 'user' ? <User size={16} className="text-slate-600" /> : <Bot size={16} className="text-white" />}
                     </div>
-                    <div 
+                    <div
                       className={`px-4 py-3 rounded-2xl ${
-                        message.role === 'user' 
-                          ? 'bg-slate-900 text-white rounded-tr-sm' 
+                        message.role === 'user'
+                          ? 'bg-slate-900 text-white rounded-tr-sm'
                           : 'bg-white text-slate-700 border border-slate-200 shadow-sm rounded-tl-sm'
                       }`}
                     >
@@ -281,30 +320,18 @@ export function AIAssistantWidget() {
                   </div>
                 </div>
               ))}
-              
+
               {isLoading && (
                 <div className="flex justify-start">
                   <div className="flex max-w-[85%] flex-row">
-                     <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center mt-1 bg-med-blue mr-2">
-                        <Bot size={16} className="text-white"/>
-                      </div>
-                      <div className="px-5 py-4 rounded-2xl bg-white border border-slate-200 shadow-sm rounded-tl-sm flex items-center space-x-2">
-                        <motion.div 
-                          animate={{ scale: [1, 1.2, 1] }} 
-                          transition={{ repeat: Infinity, duration: 1 }} 
-                          className="w-2 h-2 bg-med-blue rounded-full" 
-                        />
-                        <motion.div 
-                          animate={{ scale: [1, 1.2, 1] }} 
-                          transition={{ repeat: Infinity, duration: 1, delay: 0.2 }} 
-                          className="w-2 h-2 bg-med-blue rounded-full" 
-                        />
-                        <motion.div 
-                          animate={{ scale: [1, 1.2, 1] }} 
-                          transition={{ repeat: Infinity, duration: 1, delay: 0.4 }} 
-                          className="w-2 h-2 bg-med-blue rounded-full" 
-                        />
-                      </div>
+                    <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center mt-1 bg-med-blue mr-2">
+                      <Bot size={16} className="text-white" />
+                    </div>
+                    <div className="px-5 py-4 rounded-2xl bg-white border border-slate-200 shadow-sm rounded-tl-sm flex items-center space-x-2">
+                      <motion.div animate={{ scale: [1, 1.2, 1] }} transition={{ repeat: Infinity, duration: 1 }} className="w-2 h-2 bg-med-blue rounded-full" />
+                      <motion.div animate={{ scale: [1, 1.2, 1] }} transition={{ repeat: Infinity, duration: 1, delay: 0.2 }} className="w-2 h-2 bg-med-blue rounded-full" />
+                      <motion.div animate={{ scale: [1, 1.2, 1] }} transition={{ repeat: Infinity, duration: 1, delay: 0.4 }} className="w-2 h-2 bg-med-blue rounded-full" />
+                    </div>
                   </div>
                 </div>
               )}
@@ -327,13 +354,13 @@ export function AIAssistantWidget() {
                   disabled={!input.trim() || isLoading}
                   className="absolute right-1 top-1 bottom-1 w-10 flex items-center justify-center bg-med-blue text-white rounded-xl shadow-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 >
-                  <Send size={18} className={input.trim() && !isLoading ? "ml-1" : ""} />
+                  <Send size={18} className={input.trim() && !isLoading ? 'ml-1' : ''} />
                 </button>
               </form>
               <div className="text-center mt-2">
-                 <p className="text-[10px] text-slate-400 font-light">
-                   AI dapat memberikan informasi medis umum. Untuk diagnosis pasti, tetap butuh dokter.
-                 </p>
+                <p className="text-[10px] text-slate-400 font-light">
+                  AI dapat memberikan informasi medis umum. Untuk diagnosis pasti, tetap butuh dokter.
+                </p>
               </div>
             </div>
           </motion.div>
