@@ -25,6 +25,11 @@ async function startServer() {
     next();
   });
 
+  // Health check endpoint
+  app.get("/api/health", (_req, res) => {
+    res.json({ status: "ok", model: "qwen/qwen3-coder-480b-a35b-instruct" });
+  });
+
   // AI Chat endpoint — DeepSeek V4 Pro via NVIDIA API (Streaming & CORS enabled)
   app.post("/api/chat", async (req, res) => {
     try {
@@ -98,23 +103,82 @@ FORMAT JAWABAN:
         top_p: 0.8,
         max_tokens: 4096,
         stream: true,
+        // @ts-ignore
+        extra_body: { chat_template_kwargs: { thinking: false } }
       });
 
+      let insideThinkBlock = false;
+      let thinkBuffer = '';
+
       for await (const chunk of completion) {
-        const text = chunk.choices[0]?.delta?.content || "";
-        if (text) {
-          res.write(`data: ${JSON.stringify({ text })}\n\n`);
+        const rawText = chunk.choices[0]?.delta?.content || '';
+        if (!rawText) continue;
+
+        // Buffer to filter out <think>...</think> blocks from Qwen3
+        thinkBuffer += rawText;
+
+        // Process buffer: extract only non-think content
+        let output = '';
+        let remaining = thinkBuffer;
+
+        while (remaining.length > 0) {
+          if (insideThinkBlock) {
+            const endIdx = remaining.indexOf('</think>');
+            if (endIdx !== -1) {
+              insideThinkBlock = false;
+              remaining = remaining.slice(endIdx + 8);
+            } else {
+              break; // still waiting for closing tag
+            }
+          } else {
+            const startIdx = remaining.indexOf('<think>');
+            if (startIdx !== -1) {
+              output += remaining.slice(0, startIdx);
+              insideThinkBlock = true;
+              remaining = remaining.slice(startIdx + 7);
+            } else {
+              // No more think blocks, but wait a bit for potential start of <think>
+              const partialStart = '<think>';
+              let partialMatch = false;
+              for (let i = 1; i < partialStart.length; i++) {
+                if (remaining.endsWith(partialStart.slice(0, i))) {
+                  // possible start of <think>, keep in buffer
+                  output += remaining.slice(0, remaining.length - i);
+                  remaining = remaining.slice(remaining.length - i);
+                  partialMatch = true;
+                  break;
+                }
+              }
+              if (!partialMatch) {
+                output += remaining;
+                remaining = '';
+              }
+              break;
+            }
+          }
         }
+
+        thinkBuffer = remaining;
+
+        if (output) {
+          res.write(`data: ${JSON.stringify({ text: output })}\n\n`);
+        }
+      }
+
+      // Flush any remaining buffer content
+      if (thinkBuffer && !insideThinkBlock) {
+        res.write(`data: ${JSON.stringify({ text: thinkBuffer })}\n\n`);
       }
 
       res.write('data: [DONE]\n\n');
       res.end();
     } catch (error: any) {
-      console.error("AI Error:", error);
+      console.error("AI Error:", error?.status, error?.message, error?.error);
+      const errMsg = error?.error?.message || error?.message || 'Unknown error';
       if (!res.headersSent) {
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: errMsg });
       } else {
-        res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+        res.write(`data: ${JSON.stringify({ error: errMsg })}\n\n`);
         res.end();
       }
     }
