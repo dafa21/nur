@@ -8,8 +8,9 @@ interface Message {
   text: string;
 }
 
-// Gemini API — works directly from browser without backend
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || 'AIzaSyCKT2q9-rUictxv3_b7_I3Lxt74YGCUNsM';
+const NVIDIA_API_KEY = import.meta.env.VITE_NVIDIA_API_KEY || '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';
+const NVIDIA_MODEL = 'meta/llama-3.2-90b-vision-instruct';
+const NVIDIA_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
 
 const SYSTEM_PROMPT = `Kamu adalah NUR Health AI, sebuah Asisten Medis Virtual Cerdas bertenaga AI yang diciptakan oleh LAZNAS Dewan Dakwah untuk NUR Health Hub.
 
@@ -52,26 +53,17 @@ export function AIAssistantWidget() {
   const [messages, setMessages] = useState<Message[]>(() => {
     const saved = localStorage.getItem('nurhealth-chat-history');
     if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error('Failed to parse chat history', e);
-      }
+      try { return JSON.parse(saved); }
+      catch { /* ignore */ }
     }
-    return [
-      { role: 'model', text: 'Halo! Saya NUR Health AI. Ada yang bisa saya bantu terkait kesehatan, gejala medis, atau layanan kami?' }
-    ];
+    return [{ role: 'model', text: 'Halo! Saya NUR Health AI. Ada yang bisa saya bantu terkait kesehatan, gejala medis, atau layanan kami?' }];
   });
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
   useEffect(() => {
-    scrollToBottom();
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
   useEffect(() => {
@@ -80,10 +72,8 @@ export function AIAssistantWidget() {
 
   const handleReset = () => {
     if (window.confirm('Hapus seluruh riwayat percakapan?')) {
-      const initialMessage: Message[] = [
-        { role: 'model', text: 'Halo! Saya NUR Health AI. Ada yang bisa saya bantu terkait kesehatan, gejala medis, atau layanan kami?' }
-      ];
-      setMessages(initialMessage);
+      const initial = [{ role: 'model' as const, text: 'Halo! Saya NUR Health AI. Ada yang bisa saya bantu terkait kesehatan, gejala medis, atau layanan kami?' }];
+      setMessages(initial);
       localStorage.removeItem('nurhealth-chat-history');
     }
   };
@@ -98,35 +88,34 @@ export function AIAssistantWidget() {
     setIsLoading(true);
 
     try {
-      // Build Gemini conversation history (skip first greeting)
-      const historyContents = messages
-        .slice(1)
-        .map(m => ({
-          role: m.role === 'model' ? 'model' : 'user',
-          parts: [{ text: m.text }],
-        }));
+      // Build OpenAI-compatible messages
+      const chatMessages = [
+        { role: 'system', content: SYSTEM_PROMPT },
+        ...messages.slice(1).map(m => ({
+          role: m.role === 'model' ? 'assistant' : 'user',
+          content: m.text,
+        })),
+        { role: 'user', content: userMessage },
+      ];
 
-      const requestBody = {
-        system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-        contents: [
-          ...historyContents,
-          { role: 'user', parts: [{ text: userMessage }] },
-        ],
-        generationConfig: {
-          temperature: 0.7,
-          topP: 0.8,
-          maxOutputTokens: 1024,
+      const res = await fetch(NVIDIA_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${NVIDIA_API_KEY}`,
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream',
         },
-      };
-
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(requestBody),
-        }
-      );
+        body: JSON.stringify({
+          model: NVIDIA_MODEL,
+          messages: chatMessages,
+          max_tokens: 1024,
+          temperature: 1.00,
+          top_p: 1.00,
+          frequency_penalty: 0.00,
+          presence_penalty: 0.00,
+          stream: true,
+        }),
+      });
 
       if (!res.ok) {
         const errText = await res.text();
@@ -156,7 +145,7 @@ export function AIAssistantWidget() {
 
             try {
               const data = JSON.parse(payload);
-              const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+              const text = data?.choices?.[0]?.delta?.content;
               if (text) {
                 aiText += text;
                 setMessages(prev => {
@@ -183,8 +172,9 @@ export function AIAssistantWidget() {
     } catch (error: any) {
       console.error('AI Error:', error);
       setMessages(prev => {
-        const withoutLoading = prev.filter((_, i) => !(i === prev.length - 1 && prev[prev.length - 1].text === ''));
-        return [...withoutLoading, { role: 'model', text: 'Maaf, terjadi kesalahan. Mohon coba lagi.' }];
+        // Remove empty placeholder if exists
+        const filtered = prev[prev.length - 1]?.text === '' ? prev.slice(0, -1) : prev;
+        return [...filtered, { role: 'model', text: 'Maaf, terjadi kesalahan. Mohon coba lagi.' }];
       });
       setIsLoading(false);
     }
@@ -229,7 +219,7 @@ export function AIAssistantWidget() {
                 </div>
                 <div>
                   <h3 className="font-bold font-display text-lg leading-tight">NUR Health AI</h3>
-                  <p className="text-xs text-blue-100 font-medium">Asisten Medis Virtual</p>
+                  <p className="text-xs text-blue-100 font-medium">Asisten Medis Virtual · Llama 3.2</p>
                 </div>
               </div>
               <div className="flex items-center space-x-2">
