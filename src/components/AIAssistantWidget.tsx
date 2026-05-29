@@ -61,7 +61,7 @@ export function AIAssistantWidget() {
     try {
       const historyRes = messages.map(m => ({ role: m.role, text: m.text }));
       
-      const apiUrl = import.meta.env.VITE_API_URL || 'https://sim.nurhealthconnection.com';
+      const apiUrl = import.meta.env.VITE_API_URL || '';
       const res = await fetch(`${apiUrl}/api/chat`, {
         method: 'POST',
         headers: {
