@@ -103,3 +103,8 @@
   box-shadow: 0 6px 16px rgba(30, 64, 175, 0.5), 0 0 0 6px rgba(30, 64, 175, 0.3);
 }
 
+/* Float animation — CSS-only, runs on compositor thread (no JS cost) */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-6px); }
+}

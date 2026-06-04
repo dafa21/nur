@@ -257,9 +257,9 @@ export function AIAssistantWidget() {
                       <Bot size={16} className="text-white" />
                     </div>
                     <div className="px-5 py-4 rounded-2xl bg-white border border-slate-200 shadow-sm rounded-tl-sm flex items-center space-x-2">
-                      <motion.div animate={{ scale: [1, 1.2, 1] }} transition={{ repeat: Infinity, duration: 1 }} className="w-2 h-2 bg-med-blue rounded-full" />
-                      <motion.div animate={{ scale: [1, 1.2, 1] }} transition={{ repeat: Infinity, duration: 1, delay: 0.2 }} className="w-2 h-2 bg-med-blue rounded-full" />
-                      <motion.div animate={{ scale: [1, 1.2, 1] }} transition={{ repeat: Infinity, duration: 1, delay: 0.4 }} className="w-2 h-2 bg-med-blue rounded-full" />
+                      <span className="w-2 h-2 bg-med-blue rounded-full animate-bounce [animation-delay:0ms]" style={{willChange:'transform'}} />
+                      <span className="w-2 h-2 bg-med-blue rounded-full animate-bounce [animation-delay:150ms]" style={{willChange:'transform'}} />
+                      <span className="w-2 h-2 bg-med-blue rounded-full animate-bounce [animation-delay:300ms]" style={{willChange:'transform'}} />
                     </div>
                   </div>
                 </div>

@@ -32,24 +32,39 @@ const itemVariants = {
   show: { y: 0, opacity: 1 }
 };
 
-// Component to handle map center changes
+// Component to handle map center changes — only re-centers if position actually changed
 function ChangeView({ center }: { center: [number, number] }) {
   const map = useMap();
-  map.setView(center, 6, { 
-    animate: true,
-    duration: 1.5
-  });
+  const prevCenter = useRef<[number, number] | null>(null);
+
+  useEffect(() => {
+    if (
+      !prevCenter.current ||
+      prevCenter.current[0] !== center[0] ||
+      prevCenter.current[1] !== center[1]
+    ) {
+      map.setView(center, 6, { animate: true, duration: 1.5 });
+      prevCenter.current = center;
+    }
+  }, [center, map]);
+
   return null;
 }
 
-// Weather Widget Component
+// Weather Widget Component — uses AbortController to cancel stale fetches when hub changes
 function WeatherWidget({ lat, lng }: { lat: number; lng: number }) {
   const [weather, setWeather] = useState<{ temp: number; code: number } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const controller = new AbortController();
     setLoading(true);
-    fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current_weather=true`)
+    setWeather(null);
+
+    fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current_weather=true`,
+      { signal: controller.signal }
+    )
       .then(res => res.json())
       .then(data => {
         setWeather({
@@ -58,7 +73,12 @@ function WeatherWidget({ lat, lng }: { lat: number; lng: number }) {
         });
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch(err => {
+        if (err.name !== 'AbortError') setLoading(false);
+      });
+
+    // Cancel in-flight fetch when lat/lng changes or component unmounts
+    return () => controller.abort();
   }, [lat, lng]);
 
   const getWeatherIcon = (code: number) => {
@@ -1640,15 +1660,12 @@ export function DeploymentMap() {
             exit={{ opacity: 0, scale: 0.95 }}
             className="w-full lg:w-96 bg-slate-50 rounded-[2rem] border border-dashed border-slate-300 flex flex-col items-center justify-center p-8 text-center"
           >
-            <motion.div 
-              animate={{ 
-                y: [0, -5, 0],
-              }}
-              transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-              className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm mb-6"
+            <div
+              className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm mb-6 animate-[float_3s_ease-in-out_infinite]"
+              style={{ willChange: 'transform' }}
             >
               <Info className="text-slate-300" size={32} />
-            </motion.div>
+            </div>
             <h4 className="text-lg font-display font-bold text-slate-400 mb-2">Informasi Hub</h4>
             <p className="text-sm text-slate-400">
               Klik pada penanda di peta untuk melihat detail spesifik layanan dan dampak di wilayah tersebut.
