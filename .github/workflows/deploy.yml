@@ -8,105 +8,99 @@ on:
 
 jobs:
   deploy:
-    name: Deploy App to VPS
+    name: Build & Deploy App to VPS
     runs-on: ubuntu-latest
 
     steps:
+      # ─── STEP 1: Checkout kode ─────────────────────────────────────────────
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Deploy via SSH
+      # ─── STEP 2: Setup Node.js di GitHub Runner (RAM 7GB, CPU cepat) ───────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # ─── STEP 3: Install deps & Build DI GITHUB RUNNER (bukan di VPS!) ─────
+      # VPS tidak perlu build — GitHub Actions punya RAM 7GB vs VPS 1-2GB
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build production bundle
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+      # Verifikasi output build ada
+      - name: Verify build output
+        run: |
+          echo "=== Isi folder dist ==="
+          ls -la dist/
+          if [ ! -f "dist/server.cjs" ]; then
+            echo "ERROR: dist/server.cjs tidak ditemukan!"
+            exit 1
+          fi
+          echo "✅ dist/server.cjs siap: $(du -sh dist/server.cjs)"
+
+      # ─── STEP 4: Copy hasil build ke VPS via SCP ───────────────────────────
+      - name: Copy dist folder to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: 22
+          source: "dist/"
+          target: "/var/www/nurhealth"
+
+      - name: Copy config files to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: 22
+          source: "ecosystem.config.cjs,package.json,package-lock.json"
+          target: "/var/www/nurhealth"
+
+      # ─── STEP 5: Jalankan perintah di VPS ─────────────────────────────────
+      # VPS hanya: npm install + pm2 restart (tidak perlu build!)
+      - name: Restart app on VPS
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           password: ${{ secrets.VPS_PASSWORD }}
           port: 22
-          command_timeout: 20m
+          command_timeout: 10m
           script: |
-            set -e
-            echo "=== [1/8] MEMULAI DEPLOYMENT ==="
+            echo "=== [1/5] Menghentikan proses tsx rogue (penyebab CPU 99%)..."
+            pkill -f "tsx server.ts" 2>/dev/null && echo "  → tsx killed" || echo "  → tsx tidak ditemukan (ok)"
+            pkill -f "npx.*tsx"      2>/dev/null && echo "  → npx tsx killed" || echo "  → npx tsx tidak ditemukan (ok)"
+            sleep 2
 
-            DEPLOY_PATH="/var/www/nurhealth"
+            echo "=== [2/5] Masuk ke direktori deploy..."
+            cd /var/www/nurhealth
+            echo "  → PWD: $(pwd)"
+            echo "  → dist/server.cjs: $(ls -lh dist/server.cjs 2>/dev/null || echo 'TIDAK ADA!')"
 
-            # ─── LANGKAH 1: KILL TSX ROGUE DULU ─────────────────────────────────────
-            # Ini HARUS dilakukan SEBELUM build agar CPU bebas untuk npm install & build
-            echo "=== [1/8] Membunuh proses tsx/npx yang memakan CPU 99%..."
-            pkill -f "tsx server.ts" 2>/dev/null && echo "  → tsx server.ts killed" || echo "  → tidak ada proses tsx server.ts"
-            pkill -f "npx.*tsx"      2>/dev/null && echo "  → npx tsx killed"        || echo "  → tidak ada proses npx tsx"
-            # Beri waktu OS membebaskan CPU & port
-            sleep 3
-            echo "  → CPU sekarang bebas untuk build"
-
-            # ─── LANGKAH 2: PASTIKAN FOLDER ADA ─────────────────────────────────────
-            echo "=== [2/8] Memastikan direktori deploy ada..."
-            if [ ! -d "$DEPLOY_PATH" ]; then
-              mkdir -p "$DEPLOY_PATH" 2>/dev/null || \
-              echo "${{ secrets.VPS_PASSWORD }}" | sudo -S mkdir -p "$DEPLOY_PATH"
-              echo "${{ secrets.VPS_PASSWORD }}" | sudo -S chown -R $(whoami):$(whoami) "$DEPLOY_PATH" 2>/dev/null || true
-            fi
-            cd "$DEPLOY_PATH"
-            echo "  → Direktori aktif: $(pwd)"
-
-            # ─── LANGKAH 3: GIT PULL ─────────────────────────────────────────────────
-            echo "=== [3/8] Mengambil kode terbaru dari GitHub..."
-            if [ ! -d ".git" ]; then
-              git init
-              git remote add origin "https://github.com/${{ github.repository }}.git" || true
-            fi
-            git remote set-url origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
-            git fetch origin "${{ github.ref_name }}"
-            git checkout -B "${{ github.ref_name }}" "origin/${{ github.ref_name }}"
-            git reset --hard "origin/${{ github.ref_name }}"
-            echo "  → Kode terbaru berhasil diambil (commit: $(git rev-parse --short HEAD))"
-
-            # ─── LANGKAH 4: NPM INSTALL ──────────────────────────────────────────────
-            echo "=== [4/8] Menginstal dependensi NPM..."
-            npm install --prefer-offline 2>&1 | tail -5
+            echo "=== [3/5] Install runtime dependencies (ringan, tanpa build)..."
+            npm install 2>&1 | tail -5
             echo "  → npm install selesai"
 
-            # ─── LANGKAH 5: BUILD ────────────────────────────────────────────────────
-            echo "=== [5/8] Build produksi (Vite + esbuild)..."
-            npm run build 2>&1
-            # Verifikasi output build ada
-            if [ ! -f "dist/server.cjs" ]; then
-              echo "ERROR: dist/server.cjs tidak ditemukan setelah build!"
-              ls -la dist/ || echo "Folder dist tidak ada"
-              exit 1
-            fi
-            echo "  → Build sukses: dist/server.cjs ($(du -sh dist/server.cjs | cut -f1))"
+            echo "=== [4/5] Hapus proses PM2 lama & mulai yang baru..."
+            pm2 delete nurhealth      2>/dev/null && echo "  → proses 'nurhealth' lama dihapus"      || true
+            pm2 delete nurhealth-main 2>/dev/null && echo "  → proses 'nurhealth-main' lama dihapus" || true
 
-            # ─── LANGKAH 6: PASTIKAN PM2 ADA ─────────────────────────────────────────
-            echo "=== [6/8] Memastikan PM2 tersedia..."
-            if ! command -v pm2 &>/dev/null; then
-              echo "PM2 tidak ditemukan, menginstal..."
-              npm install -g pm2 2>&1 | tail -3
-            fi
-            echo "  → PM2 versi: $(pm2 --version)"
-
-            # ─── LANGKAH 7: RESTART PM2 ──────────────────────────────────────────────
-            echo "=== [7/8] Memulai ulang aplikasi via PM2..."
-
-            # Hapus semua proses lama (nama lama & baru) untuk fresh start
-            pm2 delete nurhealth      2>/dev/null && echo "  → Proses 'nurhealth' lama dihapus"      || true
-            pm2 delete nurhealth-main 2>/dev/null && echo "  → Proses 'nurhealth-main' lama dihapus" || true
-
-            # Mulai dengan ecosystem.config.cjs (pakai node dist/server.cjs)
             export NODE_ENV=production
             pm2 start ecosystem.config.cjs
-            echo "  → Proses baru dimulai"
+            sleep 3
 
-            # Tunggu dan verifikasi
-            sleep 4
-            echo ""
+            echo "=== [5/5] Status akhir PM2..."
             pm2 list
-            echo ""
-            STATUS=$(pm2 info nurhealth-main 2>/dev/null | grep "status" | head -1 || echo "unknown")
-            echo "  → Status: $STATUS"
+            pm2 save 2>/dev/null || true
 
-            # ─── LANGKAH 8: SAVE & SELESAI ───────────────────────────────────────────
-            echo "=== [8/8] Menyimpan konfigurasi PM2..."
-            pm2 save 2>/dev/null || \
-            echo "${{ secrets.VPS_PASSWORD }}" | sudo -S pm2 save 2>/dev/null || true
             echo ""
-            echo "✅ === DEPLOYMENT SELESAI DENGAN SUKSES ==="
+            echo "✅ === DEPLOYMENT SELESAI ==="
