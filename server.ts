@@ -1,8 +1,10 @@
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import path from "path";
 import dotenv from "dotenv";
 import OpenAI from "openai";
+// CATATAN: 'vite' TIDAK di-import secara static di sini.
+// Import Vite dilakukan secara dynamic hanya jika NODE_ENV !== 'production'
+// agar module Vite (besar!) tidak di-load sama sekali saat production.
 
 dotenv.config();
 
@@ -204,27 +206,29 @@ FORMAT JAWABAN:
     }
   });
 
-  // Vite middleware for development
+  // Vite middleware — HANYA untuk development, dynamic import agar tidak membebani production
   if (process.env.NODE_ENV !== "production") {
+    console.log('[INFO] Mode: DEVELOPMENT — memuat Vite dev server...');
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
   } else {
-    // Gunakan __dirname jika tersedia, atau process.cwd()
+    console.log('[INFO] Mode: PRODUCTION — melayani file statis dari dist/');
     const distPath = path.resolve(process.cwd(), 'dist');
-    console.log('Serving static files from:', distPath);
-    
+    console.log('[INFO] Serving static files from:', distPath);
+
     app.use(express.static(distPath));
-    
-    // Handle SPA routing - pastikan file ada sebelum dikirim
+
+    // Handle SPA routing — kirim index.html untuk semua route non-API
     app.get('*', (req, res) => {
       const indexPath = path.join(distPath, 'index.html');
       res.sendFile(indexPath, (err) => {
         if (err) {
-          console.error('Error sending index.html:', err);
-          res.status(500).send('File index.html tidak ditemukan. Pastikan Anda sudah menjalankan "npm run build".');
+          console.error('[ERROR] Gagal kirim index.html:', err);
+          res.status(500).send('File index.html tidak ditemukan. Pastikan "npm run build" sudah dijalankan.');
         }
       });
     });

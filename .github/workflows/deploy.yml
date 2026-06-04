@@ -73,29 +73,45 @@ jobs:
             echo "6. Membangun aplikasi produksi (Vite)..."
             npm run build
             
-            echo "7. Mengatur ulang proses Node.js dengan PM2..."
+            echo "7. Membersihkan proses tsx/npx rogue yang memakan CPU tinggi..."
+            # Kill semua proses tsx yang berjalan (penyebab utama CPU 100%)
+            pkill -f "tsx server.ts" 2>/dev/null || true
+            pkill -f "npx.*tsx" 2>/dev/null || true
+            # Tunggu sebentar agar port bebas
+            sleep 2
+
+            echo "8. Mengatur ulang proses Node.js dengan PM2..."
             # Cek apakah pm2 terinstal, jika tidak, pasang secara global
             if ! command -v pm2 &> /dev/null; then
               echo "PM2 tidak ditemukan! Menginstal pm2 secara global..."
               npm install -g pm2 || echo "${{ secrets.VPS_PASSWORD }}" | sudo -S npm install -g pm2
             fi
-            
+
             # Hapus proses lama 'nurhealth' (nama lama) jika masih ada untuk menghindari konflik port
             if pm2 describe nurhealth > /dev/null 2>&1; then
               echo "Proses lama 'nurhealth' ditemukan. Menghapus untuk menghindari konflik..."
               pm2 delete nurhealth
             fi
-            
-            # Cek apakah proses 'nurhealth-main' sudah terdaftar di PM2
+
+            # Force delete & restart nurhealth-main agar ecosystem.config.cjs terbaru dipakai
+            # (reload saja tidak cukup jika script berubah dari tsx → node)
             if pm2 describe nurhealth-main > /dev/null 2>&1; then
-              echo "Proses 'nurhealth-main' ditemukan. Melakukan reload (zero-downtime)..."
-              pm2 reload nurhealth-main --update-env
-            else
-              echo "Membuat proses baru 'nurhealth-main' via ecosystem.config.cjs..."
-              NODE_ENV=production pm2 start ecosystem.config.cjs
+              echo "Menghapus proses lama nurhealth-main untuk memastikan config terbaru dipakai..."
+              pm2 delete nurhealth-main
             fi
-            
-            # Menyimpan konfigurasi PM2 agar survive reboot
+
+            echo "Memulai nurhealth-main dengan ecosystem.config.cjs terbaru (node dist/server.cjs)..."
+            export NODE_ENV=production
+            pm2 start ecosystem.config.cjs
+
+            # Verifikasi proses berjalan
+            sleep 3
+            pm2 list
+            echo "CPU usage saat ini:"
+            pm2 info nurhealth-main | grep -E "cpu|memory|status" || true
+
+            # Simpan konfigurasi PM2 agar survive reboot
             pm2 save || echo "${{ secrets.VPS_PASSWORD }}" | sudo -S pm2 save
-            
+
             echo "=== DEPLOYMENT SELESAI DENGAN SUKSES ==="
+
