@@ -22,96 +22,91 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           password: ${{ secrets.VPS_PASSWORD }}
           port: 22
+          command_timeout: 20m
           script: |
-            echo "=== MEMULAI DEPLOYMENT ==="
-            
+            set -e
+            echo "=== [1/8] MEMULAI DEPLOYMENT ==="
+
             DEPLOY_PATH="/var/www/nurhealth"
-            TRIGGER_BRANCH="${{ github.ref_name }}"
-            echo "Branch pemicu: $TRIGGER_BRANCH"
-            
-            # 1. Pastikan folder tujuan ada, jika tidak, coba buat
+
+            # ─── LANGKAH 1: KILL TSX ROGUE DULU ─────────────────────────────────────
+            # Ini HARUS dilakukan SEBELUM build agar CPU bebas untuk npm install & build
+            echo "=== [1/8] Membunuh proses tsx/npx yang memakan CPU 99%..."
+            pkill -f "tsx server.ts" 2>/dev/null && echo "  → tsx server.ts killed" || echo "  → tidak ada proses tsx server.ts"
+            pkill -f "npx.*tsx"      2>/dev/null && echo "  → npx tsx killed"        || echo "  → tidak ada proses npx tsx"
+            # Beri waktu OS membebaskan CPU & port
+            sleep 3
+            echo "  → CPU sekarang bebas untuk build"
+
+            # ─── LANGKAH 2: PASTIKAN FOLDER ADA ─────────────────────────────────────
+            echo "=== [2/8] Memastikan direktori deploy ada..."
             if [ ! -d "$DEPLOY_PATH" ]; then
-              echo "Direktori $DEPLOY_PATH tidak ditemukan. Mencoba membuatnya..."
-              mkdir -p "$DEPLOY_PATH" 2>/dev/null
-              
-              if [ ! -d "$DEPLOY_PATH" ]; then
-                echo "Gagal membuat direktori dengan user biasa. Mencoba dengan sudo..."
-                echo "${{ secrets.VPS_PASSWORD }}" | sudo -S mkdir -p "$DEPLOY_PATH"
-                echo "${{ secrets.VPS_PASSWORD }}" | sudo -S chown -R $USER:$USER "$DEPLOY_PATH" 2>/dev/null || echo "${{ secrets.VPS_PASSWORD }}" | sudo -S chown -R $(whoami):$(whoami) "$DEPLOY_PATH"
-              fi
+              mkdir -p "$DEPLOY_PATH" 2>/dev/null || \
+              echo "${{ secrets.VPS_PASSWORD }}" | sudo -S mkdir -p "$DEPLOY_PATH"
+              echo "${{ secrets.VPS_PASSWORD }}" | sudo -S chown -R $(whoami):$(whoami) "$DEPLOY_PATH" 2>/dev/null || true
             fi
-            
-            # Pastikan sekarang direktori ada dan masuk ke dalamnya
-            if [ -d "$DEPLOY_PATH" ]; then
-              cd "$DEPLOY_PATH"
-              echo "Berhasil masuk ke direktori: $(pwd)"
-            else
-              echo "Error: Gagal mengakses atau membuat direktori $DEPLOY_PATH!"
-              exit 1
-            fi
-            
-            # 2. Pastikan ini adalah repositori Git, jika tidak, lakukan inisialisasi
+            cd "$DEPLOY_PATH"
+            echo "  → Direktori aktif: $(pwd)"
+
+            # ─── LANGKAH 3: GIT PULL ─────────────────────────────────────────────────
+            echo "=== [3/8] Mengambil kode terbaru dari GitHub..."
             if [ ! -d ".git" ]; then
-              echo "Folder tidak mengandung repositori Git. Melakukan inisialisasi..."
               git init
               git remote add origin "https://github.com/${{ github.repository }}.git" || true
             fi
-            
-            echo "Mengamankan remote URL menggunakan autotoken GitHub..."
             git remote set-url origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
-            
-            echo "3. Mengambil kode terbaru dari GitHub..."
-            git fetch origin "$TRIGGER_BRANCH"
-            
-            echo "4. Melakukan checkout dan reset hard ke branch $TRIGGER_BRANCH..."
-            git checkout -B "$TRIGGER_BRANCH" "origin/$TRIGGER_BRANCH"
-            git reset --hard "origin/$TRIGGER_BRANCH"
-            
-            echo "5. Menginstal dependensi NPM..."
-            npm install
-            
-            echo "6. Membangun aplikasi produksi (Vite)..."
-            npm run build
-            
-            echo "7. Membersihkan proses tsx/npx rogue yang memakan CPU tinggi..."
-            # Kill semua proses tsx yang berjalan (penyebab utama CPU 100%)
-            pkill -f "tsx server.ts" 2>/dev/null || true
-            pkill -f "npx.*tsx" 2>/dev/null || true
-            # Tunggu sebentar agar port bebas
-            sleep 2
+            git fetch origin "${{ github.ref_name }}"
+            git checkout -B "${{ github.ref_name }}" "origin/${{ github.ref_name }}"
+            git reset --hard "origin/${{ github.ref_name }}"
+            echo "  → Kode terbaru berhasil diambil (commit: $(git rev-parse --short HEAD))"
 
-            echo "8. Mengatur ulang proses Node.js dengan PM2..."
-            # Cek apakah pm2 terinstal, jika tidak, pasang secara global
-            if ! command -v pm2 &> /dev/null; then
-              echo "PM2 tidak ditemukan! Menginstal pm2 secara global..."
-              npm install -g pm2 || echo "${{ secrets.VPS_PASSWORD }}" | sudo -S npm install -g pm2
+            # ─── LANGKAH 4: NPM INSTALL ──────────────────────────────────────────────
+            echo "=== [4/8] Menginstal dependensi NPM..."
+            npm install --prefer-offline 2>&1 | tail -5
+            echo "  → npm install selesai"
+
+            # ─── LANGKAH 5: BUILD ────────────────────────────────────────────────────
+            echo "=== [5/8] Build produksi (Vite + esbuild)..."
+            npm run build 2>&1
+            # Verifikasi output build ada
+            if [ ! -f "dist/server.cjs" ]; then
+              echo "ERROR: dist/server.cjs tidak ditemukan setelah build!"
+              ls -la dist/ || echo "Folder dist tidak ada"
+              exit 1
             fi
+            echo "  → Build sukses: dist/server.cjs ($(du -sh dist/server.cjs | cut -f1))"
 
-            # Hapus proses lama 'nurhealth' (nama lama) jika masih ada untuk menghindari konflik port
-            if pm2 describe nurhealth > /dev/null 2>&1; then
-              echo "Proses lama 'nurhealth' ditemukan. Menghapus untuk menghindari konflik..."
-              pm2 delete nurhealth
+            # ─── LANGKAH 6: PASTIKAN PM2 ADA ─────────────────────────────────────────
+            echo "=== [6/8] Memastikan PM2 tersedia..."
+            if ! command -v pm2 &>/dev/null; then
+              echo "PM2 tidak ditemukan, menginstal..."
+              npm install -g pm2 2>&1 | tail -3
             fi
+            echo "  → PM2 versi: $(pm2 --version)"
 
-            # Force delete & restart nurhealth-main agar ecosystem.config.cjs terbaru dipakai
-            # (reload saja tidak cukup jika script berubah dari tsx → node)
-            if pm2 describe nurhealth-main > /dev/null 2>&1; then
-              echo "Menghapus proses lama nurhealth-main untuk memastikan config terbaru dipakai..."
-              pm2 delete nurhealth-main
-            fi
+            # ─── LANGKAH 7: RESTART PM2 ──────────────────────────────────────────────
+            echo "=== [7/8] Memulai ulang aplikasi via PM2..."
 
-            echo "Memulai nurhealth-main dengan ecosystem.config.cjs terbaru (node dist/server.cjs)..."
+            # Hapus semua proses lama (nama lama & baru) untuk fresh start
+            pm2 delete nurhealth      2>/dev/null && echo "  → Proses 'nurhealth' lama dihapus"      || true
+            pm2 delete nurhealth-main 2>/dev/null && echo "  → Proses 'nurhealth-main' lama dihapus" || true
+
+            # Mulai dengan ecosystem.config.cjs (pakai node dist/server.cjs)
             export NODE_ENV=production
             pm2 start ecosystem.config.cjs
+            echo "  → Proses baru dimulai"
 
-            # Verifikasi proses berjalan
-            sleep 3
+            # Tunggu dan verifikasi
+            sleep 4
+            echo ""
             pm2 list
-            echo "CPU usage saat ini:"
-            pm2 info nurhealth-main | grep -E "cpu|memory|status" || true
+            echo ""
+            STATUS=$(pm2 info nurhealth-main 2>/dev/null | grep "status" | head -1 || echo "unknown")
+            echo "  → Status: $STATUS"
 
-            # Simpan konfigurasi PM2 agar survive reboot
-            pm2 save || echo "${{ secrets.VPS_PASSWORD }}" | sudo -S pm2 save
-
-            echo "=== DEPLOYMENT SELESAI DENGAN SUKSES ==="
-
+            # ─── LANGKAH 8: SAVE & SELESAI ───────────────────────────────────────────
+            echo "=== [8/8] Menyimpan konfigurasi PM2..."
+            pm2 save 2>/dev/null || \
+            echo "${{ secrets.VPS_PASSWORD }}" | sudo -S pm2 save 2>/dev/null || true
+            echo ""
+            echo "✅ === DEPLOYMENT SELESAI DENGAN SUKSES ==="
