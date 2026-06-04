@@ -80,16 +80,22 @@ jobs:
               npm install -g pm2 || echo "${{ secrets.VPS_PASSWORD }}" | sudo -S npm install -g pm2
             fi
             
-            # Cek apakah proses 'nurhealth' sudah terdaftar di PM2
+            # Hapus proses lama 'nurhealth' (nama lama) jika masih ada untuk menghindari konflik port
             if pm2 describe nurhealth > /dev/null 2>&1; then
-              echo "Proses 'nurhealth' ditemukan. Melakukan restart..."
-              NODE_ENV=production pm2 restart nurhealth
-            else
-              echo "Membuat proses baru 'nurhealth' di PM2..."
-              NODE_ENV=production pm2 start npm --name "nurhealth" -- start
+              echo "Proses lama 'nurhealth' ditemukan. Menghapus untuk menghindari konflik..."
+              pm2 delete nurhealth
             fi
             
-            # Menyimpan konfigurasi PM2
+            # Cek apakah proses 'nurhealth-main' sudah terdaftar di PM2
+            if pm2 describe nurhealth-main > /dev/null 2>&1; then
+              echo "Proses 'nurhealth-main' ditemukan. Melakukan reload (zero-downtime)..."
+              pm2 reload nurhealth-main --update-env
+            else
+              echo "Membuat proses baru 'nurhealth-main' via ecosystem.config.cjs..."
+              NODE_ENV=production pm2 start ecosystem.config.cjs
+            fi
+            
+            # Menyimpan konfigurasi PM2 agar survive reboot
             pm2 save || echo "${{ secrets.VPS_PASSWORD }}" | sudo -S pm2 save
             
             echo "=== DEPLOYMENT SELESAI DENGAN SUKSES ==="

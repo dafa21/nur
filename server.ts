@@ -6,6 +6,26 @@ import OpenAI from "openai";
 
 dotenv.config();
 
+// ─── Global Error Guards (mencegah crash loop di PM2) ──────────────────────
+process.on("uncaughtException", (err) => {
+  console.error("[FATAL] uncaughtException — proses TIDAK akan di-crash:", err);
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error("[WARN] unhandledRejection — promise tidak di-handle:", reason);
+});
+
+// Graceful shutdown saat PM2 mengirim sinyal SIGINT / SIGTERM
+process.on("SIGINT", () => {
+  console.log("[INFO] SIGINT diterima — server ditutup dengan bersih.");
+  process.exit(0);
+});
+process.on("SIGTERM", () => {
+  console.log("[INFO] SIGTERM diterima — server ditutup dengan bersih.");
+  process.exit(0);
+});
+// ────────────────────────────────────────────────────────────────────────────
+
 const app = express();
 app.use(express.json());
 const PORT = Number(process.env.PORT) || 3000;
