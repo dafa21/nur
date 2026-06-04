@@ -12,27 +12,24 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ─── STEP 1: Checkout kode ─────────────────────────────────────────────
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # ─── STEP 1.5: KILL ROGUE PROCESSES DI VPS DULU ─────────────────────────
-      # VPS CPU 99% membuat koneksi SCP/SSH sering timeout (i/o timeout).
-      # Kita kill dulu di awal agar VPS bernapas sebelum kita kirim file.
-      - name: Free up VPS CPU
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          password: ${{ secrets.VPS_PASSWORD }}
-          port: 22
-          timeout: 60s
-          script: |
-            echo "Membunuh proses tsx yang membuat CPU 100%..."
-            pkill -f "tsx server.ts" 2>/dev/null || true
-            pkill -f "npx.*tsx" 2>/dev/null || true
-            sleep 2
-            echo "CPU seharusnya sudah lega."
+      # ─── STEP 1: KILL ROGUE PROCESSES VIA PLAIN SSH ───────────────────────
+      # Menggunakan plain SSH untuk menghindari isu timeout dari docker action.
+      # Kita matikan PM2 dan node secara paksa agar CPU 100% turun sebelum SCP.
+      - name: Force Kill Node & PM2 on VPS
+        env:
+          SSH_PASSWORD: ${{ secrets.VPS_PASSWORD }}
+        run: |
+          sudo apt-get install -y sshpass
+          export SSHPASS=$SSH_PASSWORD
+          sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=60 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+            "echo '=== Membunuh PM2 dan Node ===' && \
+             pm2 kill || true && \
+             pkill -9 -f node || true && \
+             pkill -9 -f tsx || true && \
+             echo 'CPU sudah lega.'" || echo "Gagal terhubung, tapi kita akan tetap lanjut."
 
       # ─── STEP 2: Setup Node.js di GitHub Runner (RAM 7GB, CPU cepat) ───────
       - name: Setup Node.js
@@ -42,7 +39,6 @@ jobs:
           cache: 'npm'
 
       # ─── STEP 3: Install deps & Build DI GITHUB RUNNER (bukan di VPS!) ─────
-      # VPS tidak perlu build — GitHub Actions punya RAM 7GB vs VPS 1-2GB
       - name: Install dependencies
         run: npm ci
 
@@ -72,6 +68,7 @@ jobs:
           port: 22
           source: "dist/"
           target: "/var/www/nurhealth"
+          timeout: 120s
 
       - name: Copy config files to VPS
         uses: appleboy/scp-action@v0.1.7
@@ -82,9 +79,9 @@ jobs:
           port: 22
           source: "ecosystem.config.cjs,package.json,package-lock.json"
           target: "/var/www/nurhealth"
+          timeout: 60s
 
       # ─── STEP 5: Jalankan perintah di VPS ─────────────────────────────────
-      # VPS hanya: npm install + pm2 restart (tidak perlu build!)
       - name: Restart app on VPS
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -94,29 +91,20 @@ jobs:
           port: 22
           command_timeout: 10m
           script: |
-            echo "=== [1/5] Menghentikan proses tsx rogue (penyebab CPU 99%)..."
-            pkill -f "tsx server.ts" 2>/dev/null && echo "  → tsx killed" || echo "  → tsx tidak ditemukan (ok)"
-            pkill -f "npx.*tsx"      2>/dev/null && echo "  → npx tsx killed" || echo "  → npx tsx tidak ditemukan (ok)"
-            sleep 2
-
-            echo "=== [2/5] Masuk ke direktori deploy..."
+            echo "=== [1/4] Masuk ke direktori deploy..."
             cd /var/www/nurhealth
             echo "  → PWD: $(pwd)"
-            echo "  → dist/server.cjs: $(ls -lh dist/server.cjs 2>/dev/null || echo 'TIDAK ADA!')"
-
-            echo "=== [3/5] Install runtime dependencies (ringan, tanpa build)..."
-            npm install 2>&1 | tail -5
+            
+            echo "=== [2/4] Install runtime dependencies..."
+            npm install --production 2>&1 | tail -5
             echo "  → npm install selesai"
 
-            echo "=== [4/5] Hapus proses PM2 lama & mulai yang baru..."
-            pm2 delete nurhealth      2>/dev/null && echo "  → proses 'nurhealth' lama dihapus"      || true
-            pm2 delete nurhealth-main 2>/dev/null && echo "  → proses 'nurhealth-main' lama dihapus" || true
-
+            echo "=== [3/4] Memulai aplikasi dengan PM2..."
             export NODE_ENV=production
             pm2 start ecosystem.config.cjs
             sleep 3
 
-            echo "=== [5/5] Status akhir PM2..."
+            echo "=== [4/4] Status akhir PM2..."
             pm2 list
             pm2 save 2>/dev/null || true
 
