@@ -16,6 +16,24 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      # ─── STEP 1.5: KILL ROGUE PROCESSES DI VPS DULU ─────────────────────────
+      # VPS CPU 99% membuat koneksi SCP/SSH sering timeout (i/o timeout).
+      # Kita kill dulu di awal agar VPS bernapas sebelum kita kirim file.
+      - name: Free up VPS CPU
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: 22
+          timeout: 60s
+          script: |
+            echo "Membunuh proses tsx yang membuat CPU 100%..."
+            pkill -f "tsx server.ts" 2>/dev/null || true
+            pkill -f "npx.*tsx" 2>/dev/null || true
+            sleep 2
+            echo "CPU seharusnya sudah lega."
+
       # ─── STEP 2: Setup Node.js di GitHub Runner (RAM 7GB, CPU cepat) ───────
       - name: Setup Node.js
         uses: actions/setup-node@v4
