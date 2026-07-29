@@ -213,8 +213,6 @@ function getUsgImages(imgField: any): string[] {
 }
 
 function PatientList({ patients }: { patients: any[] }) {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [selectedVisitId, setSelectedVisitId] = useState<{ [patientId: string]: number }>({});
   const [searchQuery, setSearchQuery] = useState('');
 
   const grouped = useMemo(() => {
@@ -551,41 +549,17 @@ function PatientList({ patients }: { patients: any[] }) {
           </div>
         ) : (
           filteredPatients.map(p => {
-            const isExpanded = expandedId === p.id;
             const visits = p.visits;
             
-            // Current visit selection state
-            const currentVisitId = selectedVisitId[p.id] !== undefined ? selectedVisitId[p.id] : visits[0]?.id;
-            const currentVisit = visits.find((v: any) => v.id === currentVisitId) || visits[0];
-
-            const lastVitals = currentVisit?.vitals?.[0];
-            const lastSoap = currentVisit?.soaps?.[0];
-            const lastAnc = currentVisit?.anc || p.anc;
-            const lastAncRecords = currentVisit?.anc_records || p.anc_records;
-
             return (
               <motion.div 
                 key={p.id} 
                 layout="position"
-                className={`border rounded-xl overflow-hidden bg-white shadow-sm transition-all duration-300 ${
-                  isExpanded ? 'border-med-blue ring-1 ring-blue-50/50' : 'border-slate-200 hover:border-slate-300'
-                }`}
+                className="border rounded-xl overflow-hidden bg-white shadow-sm transition-all duration-300 border-slate-200 hover:border-slate-300"
               >
-                {/* Header Click Area */}
+                {/* Header Area */}
                 <div 
-                  className={`p-3 cursor-pointer flex justify-between items-center transition-colors ${
-                    isExpanded ? 'bg-gradient-to-r from-blue-50/20 to-indigo-50/10' : 'bg-slate-50/40 hover:bg-slate-50'
-                  }`}
-                  onClick={() => setExpandedId(isExpanded ? null : p.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      setExpandedId(isExpanded ? null : p.id);
-                    }
-                  }}
-                  tabIndex={0}
-                  role="button"
-                  aria-expanded={isExpanded}
+                  className="p-3 flex justify-between items-center transition-colors bg-slate-50/40 hover:bg-slate-50"
                 >
                   <div className="flex items-center space-x-3">
                     <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 text-med-blue flex items-center justify-center font-extrabold text-sm shadow-inner shrink-0 leading-none">
@@ -615,90 +589,7 @@ function PatientList({ patients }: { patients: any[] }) {
                       </div>
                     </div>
                   </div>
-                  <div className={`p-1 rounded-lg transition-colors text-slate-405 ${
-                    isExpanded ? 'bg-blue-50 text-med-blue' : 'hover:bg-slate-100/50'
-                  }`}>
-                    {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                  </div>
                 </div>
-                
-                {/* Expanded Details Pane */}
-                <AnimatePresence>
-                  {isExpanded && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.2, ease: 'easeInOut' }}
-                      className="px-3 pb-3 pt-2.5 border-t border-slate-100 space-y-3"
-                    >
-                      {/* Visits History Timeline Pill Selector */}
-                      {visits.length > 1 && (
-                        <div className="bg-slate-50 p-1.5 rounded-xl border border-slate-200/60 flex items-center space-x-1 overflow-x-auto select-none">
-                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest shrink-0 px-1.5">Riwayat Kunjungan:</span>
-                          {visits.map((v: any, index: number) => {
-                            const isSelected = v.id === currentVisitId;
-                            return (
-                              <button
-                                key={v.id}
-                                onClick={() => setSelectedVisitId(prev => ({ ...prev, [p.id]: v.id }))}
-                                className={`px-2 py-0.5 text-[9px] font-extrabold rounded-lg transition-all shrink-0 ${
-                                  isSelected 
-                                    ? 'bg-med-blue text-white shadow-sm' 
-                                    : 'text-slate-500 hover:text-slate-850 hover:bg-slate-200/50 bg-white border border-slate-200/40'
-                                }`}
-                              >
-                                Kunjungan #{visits.length - index} ({v.status})
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-
-                      <div className="space-y-3.5 bg-slate-50/40 p-2.5 rounded-xl border border-slate-100">
-                        {/* Visit Info Status Bar */}
-                        <div className="flex justify-between items-center text-[10px] border-b border-dashed border-slate-200 pb-2">
-                          <span className="font-extrabold text-slate-400 uppercase tracking-wider flex items-center">
-                            <Calendar size={12} className="mr-1.5 text-slate-400" /> Rincian Rekam Medis Kunjungan
-                          </span>
-                          <span className={`px-2 py-0.5 rounded-lg border font-black uppercase text-[8px] tracking-wider flex items-center gap-1 ${
-                            currentVisit?.status === 'Selesai' 
-                              ? 'bg-emerald-50 border-emerald-100 text-emerald-700' 
-                              : 'bg-amber-50 border-amber-250 text-amber-800'
-                          }`}>
-                            <span className={`w-1 h-1 rounded-full ${currentVisit?.status === 'Selesai' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                            {currentVisit?.status}
-                          </span>
-                        </div>
-
-                        {/* Complaint Block */}
-                        <div>
-                          <h6 className="text-[10px] uppercase font-black text-slate-400 mb-1 flex items-center tracking-widest leading-none">
-                            <AlertCircle size={12} className="mr-1.5 text-rose-500" /> Keluhan Utama Pasien
-                          </h6>
-                          <div className="bg-white border border-slate-200/60 p-2.5 rounded-lg text-xs text-slate-700 font-medium leading-relaxed">
-                            {currentVisit?.complaint || <span className="text-slate-400 italic font-normal">Tidak ada keluhan utama terdaftar</span>}
-                          </div>
-                        </div>
-                        
-                        {/* Vitals */}
-                        {renderVitals(lastVitals)}
-
-                        {/* SOAP Records */}
-                        {lastSoap ? (
-                          renderSOAP(lastSoap)
-                        ) : (
-                          <div className="text-center p-4 bg-slate-50 rounded-xl border border-slate-100 italic text-slate-400 text-xs">
-                            Kunjungan ini belum memiliki rekam SOAP Dokter
-                          </div>
-                        )}
-
-                        {/* ANC / Pregnancy Records */}
-                        {lastAnc && renderANC(lastAnc, lastAncRecords)}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
               </motion.div>
             );
           })
