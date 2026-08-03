@@ -212,6 +212,26 @@ function getUsgImages(imgField: any): string[] {
   return [];
 }
 
+function parseLogos(logoField: any): string[] {
+  if (!logoField) return [];
+  if (Array.isArray(logoField)) return logoField;
+  if (typeof logoField === 'string') {
+    if (logoField.trim().startsWith('[')) {
+      try {
+        const parsed = JSON.parse(logoField);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) {
+        // ignore
+      }
+    }
+    if (logoField.includes(',')) {
+       return logoField.split(',').map(s => s.trim()).filter(Boolean);
+    }
+    return [logoField];
+  }
+  return [];
+}
+
 function PatientList({ patients }: { patients: any[] }) {
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -688,7 +708,11 @@ function ClinicDetailModal({
               {location.sponsorName && (
                 <div className="flex items-center space-x-2 bg-amber-50 px-2.5 py-1.5 rounded-lg border border-amber-100 w-fit">
                   {location.sponsorLogo && (
-                    <img src={location.sponsorLogo} alt={location.sponsorName} className="w-auto h-auto max-h-8 max-w-[100px] rounded object-contain bg-white px-1.5 py-0.5 border border-amber-200 shrink-0" />
+                    <div className="flex gap-1.5 items-center">
+                      {parseLogos(location.sponsorLogo).map((logo, idx) => (
+                        <img key={idx} src={logo} alt={location.sponsorName} className="w-auto h-auto max-h-8 max-w-[100px] rounded object-contain bg-white px-1.5 py-0.5 border border-amber-200 shrink-0" />
+                      ))}
+                    </div>
                   )}
                   <div>
                     <p className="text-[8px] font-bold text-amber-500 uppercase tracking-widest leading-none">Sponsor</p>
@@ -698,7 +722,11 @@ function ClinicDetailModal({
               )}
               {location.supportLogo && (
                 <div className="flex items-center space-x-2 bg-blue-50 px-2.5 py-1.5 rounded-lg border border-blue-100 w-fit">
-                  <img src={location.supportLogo} alt="Support & Kerjasama" className="w-auto h-auto max-h-8 max-w-[100px] rounded object-contain bg-white px-1.5 py-0.5 border border-blue-200 shrink-0" />
+                  <div className="flex gap-1.5 items-center">
+                    {parseLogos(location.supportLogo).map((logo, idx) => (
+                      <img key={idx} src={logo} alt="Support & Kerjasama" className="w-auto h-auto max-h-8 max-w-[100px] rounded object-contain bg-white px-1.5 py-0.5 border border-blue-200 shrink-0" />
+                    ))}
+                  </div>
                   <div>
                     <p className="text-[8px] font-bold text-blue-500 uppercase tracking-widest leading-none">Support</p>
                     <p className="text-[11px] font-bold text-slate-700 leading-tight">Kerjasama</p>
@@ -1170,8 +1198,8 @@ interface Location {
   };
   services?: string[];
   sponsorName?: string;
-  sponsorLogo?: string;
-  supportLogo?: string;
+  sponsorLogo?: any;
+  supportLogo?: any;
   youtubeLink?: string;
   raw?: any;
 }
@@ -1532,11 +1560,16 @@ export function DeploymentMap() {
                     className="flex items-center space-x-3 bg-gradient-to-r from-amber-50 to-orange-50 p-3 rounded-2xl border border-amber-100"
                   >
                     {selectedHub.sponsorLogo && (
-                      <img 
-                        src={selectedHub.sponsorLogo} 
-                        alt={selectedHub.sponsorName}
-                        className="w-auto h-auto max-h-12 max-w-[140px] rounded-lg object-contain bg-white px-2 py-1 border border-amber-200 shadow-sm shrink-0"
-                      />
+                      <div className="flex gap-2 flex-wrap">
+                        {parseLogos(selectedHub.sponsorLogo).map((logo, idx) => (
+                          <img 
+                            key={idx}
+                            src={logo} 
+                            alt={selectedHub.sponsorName}
+                            className="w-auto h-auto max-h-12 max-w-[140px] rounded-lg object-contain bg-white px-2 py-1 border border-amber-200 shadow-sm shrink-0"
+                          />
+                        ))}
+                      </div>
                     )}
                     <div>
                       <p className="text-[9px] font-bold text-amber-500 uppercase tracking-widest leading-none mb-0.5">Didukung Oleh</p>
@@ -1551,11 +1584,16 @@ export function DeploymentMap() {
                     animate={{ opacity: 1, scale: 1 }}
                     className="flex items-center space-x-3 bg-gradient-to-r from-blue-50 to-indigo-50 p-3 rounded-2xl border border-blue-100"
                   >
-                    <img 
-                      src={selectedHub.supportLogo} 
-                      alt="Support & Kerjasama"
-                      className="w-auto h-auto max-h-12 max-w-[140px] rounded-lg object-contain bg-white px-2 py-1 border border-blue-200 shadow-sm shrink-0"
-                    />
+                    <div className="flex gap-2 flex-wrap">
+                      {parseLogos(selectedHub.supportLogo).map((logo, idx) => (
+                        <img 
+                          key={idx}
+                          src={logo} 
+                          alt="Support & Kerjasama"
+                          className="w-auto h-auto max-h-12 max-w-[140px] rounded-lg object-contain bg-white px-2 py-1 border border-blue-200 shadow-sm shrink-0"
+                        />
+                      ))}
+                    </div>
                     <div>
                       <p className="text-[9px] font-bold text-blue-500 uppercase tracking-widest leading-none mb-0.5">Support & Kerjasama</p>
                       <p className="text-xs font-bold text-slate-800 leading-tight">Partner Clinic</p>
