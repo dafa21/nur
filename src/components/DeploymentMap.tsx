@@ -684,17 +684,39 @@ function ClinicDetailModal({
             </div>
             <h3 className="text-lg sm:text-xl font-display font-bold text-slate-800 leading-none">{location.name}</h3>
             <p className="text-xs text-slate-500 mt-1">{location.description}</p>
-            {location.sponsorName && (
-              <div className="flex items-center space-x-2 mt-2 bg-amber-50 px-2.5 py-1.5 rounded-lg border border-amber-100 w-fit">
-                {location.sponsorLogo && (
-                  <img src={location.sponsorLogo} alt={location.sponsorName} className="w-auto h-auto max-h-8 max-w-[100px] rounded object-contain bg-white px-1.5 py-0.5 border border-amber-200 shrink-0" />
-                )}
-                <div>
-                  <p className="text-[8px] font-bold text-amber-500 uppercase tracking-widest leading-none">Sponsor</p>
-                  <p className="text-[11px] font-bold text-slate-700 leading-tight">{location.sponsorName}</p>
+            <div className="flex flex-wrap gap-2 mt-2">
+              {location.sponsorName && (
+                <div className="flex items-center space-x-2 bg-amber-50 px-2.5 py-1.5 rounded-lg border border-amber-100 w-fit">
+                  {location.sponsorLogo && (
+                    <img src={location.sponsorLogo} alt={location.sponsorName} className="w-auto h-auto max-h-8 max-w-[100px] rounded object-contain bg-white px-1.5 py-0.5 border border-amber-200 shrink-0" />
+                  )}
+                  <div>
+                    <p className="text-[8px] font-bold text-amber-500 uppercase tracking-widest leading-none">Sponsor</p>
+                    <p className="text-[11px] font-bold text-slate-700 leading-tight">{location.sponsorName}</p>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+              {location.supportLogo && (
+                <div className="flex items-center space-x-2 bg-blue-50 px-2.5 py-1.5 rounded-lg border border-blue-100 w-fit">
+                  <img src={location.supportLogo} alt="Support & Kerjasama" className="w-auto h-auto max-h-8 max-w-[100px] rounded object-contain bg-white px-1.5 py-0.5 border border-blue-200 shrink-0" />
+                  <div>
+                    <p className="text-[8px] font-bold text-blue-500 uppercase tracking-widest leading-none">Support</p>
+                    <p className="text-[11px] font-bold text-slate-700 leading-tight">Kerjasama</p>
+                  </div>
+                </div>
+              )}
+              {location.youtubeLink && (
+                <a href={location.youtubeLink} target="_blank" rel="noreferrer" className="flex items-center space-x-2 bg-red-50 px-2.5 py-1.5 rounded-lg border border-red-100 w-fit hover:bg-red-100 transition-colors">
+                  <div className="w-8 h-8 flex items-center justify-center bg-red-100 text-red-600 rounded">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"/></svg>
+                  </div>
+                  <div>
+                    <p className="text-[8px] font-bold text-red-500 uppercase tracking-widest leading-none">Live Stream</p>
+                    <p className="text-[11px] font-bold text-slate-700 leading-tight">YouTube TV</p>
+                  </div>
+                </a>
+              )}
+            </div>
           </div>
           <button 
             onClick={onClose}
@@ -1149,6 +1171,8 @@ interface Location {
   services?: string[];
   sponsorName?: string;
   sponsorLogo?: string;
+  supportLogo?: string;
+  youtubeLink?: string;
   raw?: any;
 }
 
@@ -1273,6 +1297,8 @@ export function DeploymentMap() {
               services: [],
               sponsorName: clinic.sponsor_name || '',
               sponsorLogo: clinic.sponsor_logo || '',
+              supportLogo: clinic.support_logo || clinic.kerjasama_logo || '',
+              youtubeLink: clinic.youtube_link || clinic.youtube_tv_link || '',
               raw: {
                 ...clinic,
                 revenue: finalRevenue,
@@ -1497,26 +1523,65 @@ export function DeploymentMap() {
                 </p>
               </motion.div>
 
-              {/* Sponsor Badge */}
-              {selectedHub.sponsorName && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="flex items-center space-x-3 bg-gradient-to-r from-amber-50 to-orange-50 p-3 rounded-2xl border border-amber-100"
-                >
-                  {selectedHub.sponsorLogo && (
+              {/* Badges: Sponsor, Support & Kerjasama, YouTube */}
+              <div className="flex flex-col gap-3">
+                {selectedHub.sponsorName && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="flex items-center space-x-3 bg-gradient-to-r from-amber-50 to-orange-50 p-3 rounded-2xl border border-amber-100"
+                  >
+                    {selectedHub.sponsorLogo && (
+                      <img 
+                        src={selectedHub.sponsorLogo} 
+                        alt={selectedHub.sponsorName}
+                        className="w-auto h-auto max-h-12 max-w-[140px] rounded-lg object-contain bg-white px-2 py-1 border border-amber-200 shadow-sm shrink-0"
+                      />
+                    )}
+                    <div>
+                      <p className="text-[9px] font-bold text-amber-500 uppercase tracking-widest leading-none mb-0.5">Didukung Oleh</p>
+                      <p className="text-xs font-bold text-slate-800 leading-tight">{selectedHub.sponsorName}</p>
+                    </div>
+                  </motion.div>
+                )}
+
+                {selectedHub.supportLogo && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="flex items-center space-x-3 bg-gradient-to-r from-blue-50 to-indigo-50 p-3 rounded-2xl border border-blue-100"
+                  >
                     <img 
-                      src={selectedHub.sponsorLogo} 
-                      alt={selectedHub.sponsorName}
-                      className="w-auto h-auto max-h-12 max-w-[140px] rounded-lg object-contain bg-white px-2 py-1 border border-amber-200 shadow-sm shrink-0"
+                      src={selectedHub.supportLogo} 
+                      alt="Support & Kerjasama"
+                      className="w-auto h-auto max-h-12 max-w-[140px] rounded-lg object-contain bg-white px-2 py-1 border border-blue-200 shadow-sm shrink-0"
                     />
-                  )}
-                  <div>
-                    <p className="text-[9px] font-bold text-amber-500 uppercase tracking-widest leading-none mb-0.5">Didukung Oleh</p>
-                    <p className="text-xs font-bold text-slate-800 leading-tight">{selectedHub.sponsorName}</p>
-                  </div>
-                </motion.div>
-              )}
+                    <div>
+                      <p className="text-[9px] font-bold text-blue-500 uppercase tracking-widest leading-none mb-0.5">Support & Kerjasama</p>
+                      <p className="text-xs font-bold text-slate-800 leading-tight">Partner Clinic</p>
+                    </div>
+                  </motion.div>
+                )}
+
+                {selectedHub.youtubeLink && (
+                  <motion.a
+                    href={selectedHub.youtubeLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="flex items-center space-x-3 bg-gradient-to-r from-red-50 to-rose-50 p-3 rounded-2xl border border-red-100 hover:shadow-md transition-shadow"
+                  >
+                    <div className="w-12 h-12 flex items-center justify-center bg-red-100 text-red-600 rounded-lg shrink-0">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"/></svg>
+                    </div>
+                    <div>
+                      <p className="text-[9px] font-bold text-red-500 uppercase tracking-widest leading-none mb-0.5">Live Stream</p>
+                      <p className="text-xs font-bold text-slate-800 leading-tight">Tonton di YouTube TV</p>
+                    </div>
+                  </motion.a>
+                )}
+              </div>
 
               {/* Weather Widget */}
               <WeatherWidget lat={selectedHub.position[0]} lng={selectedHub.position[1]} />
