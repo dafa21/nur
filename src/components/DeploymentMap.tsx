@@ -634,8 +634,8 @@ function ClinicDetailModal({
   }, [patients]);
 
   const totalPatients = groupedPatients.length;
-  const pregnantPatients = groupedPatients.filter(p => p.is_pregnant === 1).length;
-  const childrenPatients = groupedPatients.filter(p => (Number(p.age) || 0) < 17 && p.is_pregnant !== 1).length;
+  const pregnantPatients = groupedPatients.filter((p: any) => p.is_pregnant === 1).length;
+  const childrenPatients = groupedPatients.filter((p: any) => (Number(p.age) || 0) < 17 && p.is_pregnant !== 1).length;
   const generalPatients = totalPatients - pregnantPatients - childrenPatients;
 
   // Group patients by status for stats
@@ -802,362 +802,44 @@ function ClinicDetailModal({
             </div>
           </div>
 
-          {/* Tab Segment Selector */}
-          <div className="flex bg-slate-200/50 p-1 rounded-xl">
-            <button
-              onClick={() => {
-                setActiveTab('medical');
-                setSearchTerm('');
-              }}
-              className={`flex-1 py-1.5 sm:py-2.5 rounded-lg text-center font-bold text-xs transition-all flex items-center justify-center space-x-2 ${
-                activeTab === 'medical'
-                  ? 'bg-white text-med-blue shadow-sm'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              <FileText size={14} />
-              <span>Rekam Medis Pasien</span>
-            </button>
-            <button
-              onClick={() => {
-                setActiveTab('financial');
-                setSearchTerm('');
-              }}
-              className={`flex-1 py-1.5 sm:py-2.5 rounded-lg text-center font-bold text-xs transition-all flex items-center justify-center space-x-2 ${
-                activeTab === 'financial'
-                  ? 'bg-white text-med-blue shadow-sm'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              <Pill size={14} />
-              <span>Rincian Transaksi Kasir</span>
-            </button>
-          </div>
-
-          <div className="space-y-4">
-            {activeTab === 'financial' && (
-              <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
-                <div className="border-b border-slate-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <h4 className="font-bold text-slate-800 text-sm flex items-center">
-                      <span>Rincian Pendapatan Kasir (Status Selesai)</span>
-                    </h4>
-                    <p className="text-[10px] text-slate-500 mt-0.5">Penetapan tarif real-time berdasarkan rekam tindakan klinik</p>
-                  </div>
-                  
-                  {/* Search Input for Transactions */}
-                  <div className="relative w-full sm:w-64">
-                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                      <Search size={14} />
-                    </span>
-                    <input
-                      type="text"
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      placeholder="Cari transaksi..."
-                      className="w-full pl-9 pr-8 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-med-blue focus:bg-white transition-all font-medium text-slate-800"
-                    />
-                    {searchTerm && (
-                      <button 
-                        onClick={() => setSearchTerm('')}
-                        className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600"
-                      >
-                        <X size={14} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {paidPatients.length === 0 ? (
-                  <p className="text-xs text-slate-400 text-center py-12">Belum ada transaksi pembayaran lunas.</p>
-                ) : (
-                  <>
-                    <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1">
-                      {paidPatients
-                        .filter((p: any) => 
-                          !searchTerm.trim() || 
-                          p.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          p.rm_number?.toLowerCase().includes(searchTerm.toLowerCase())
-                        )
-                        .map((p: any) => {
-                          const billing = getPatientBillingDetail(p);
-                          return (
-                            <div key={p.id} className="bg-slate-50/70 p-3 rounded-2xl border border-slate-100 text-xs space-y-2">
-                              <div className="flex justify-between items-center border-b border-dashed border-slate-200 pb-1.5">
-                                <div>
-                                  <span className="font-bold text-slate-805 text-slate-800">{p.name}</span>
-                                  <span className="text-[10px] text-slate-404 text-slate-400 ml-2">RM: {p.rm_number}</span>
-                                </div>
-                                <span className="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full font-bold text-[9px] uppercase tracking-wider shrink-0 font-bold border-none bg-none">Selesai</span>
-                              </div>
-                              <div className="space-y-1 text-slate-500 text-[11px]">
-                                <div className="flex justify-between">
-                                  <span>Biaya Konsultasi Pokok</span>
-                                  <span>Rp {billing.base.toLocaleString('id-ID')}</span>
-                                </div>
-                                {billing.vitals > 0 && (
-                                  <div className="flex justify-between">
-                                    <span>Pemeriksaan Tanda Vital</span>
-                                    <span>+ Rp {billing.vitals.toLocaleString('id-ID')}</span>
-                                  </div>
-                                )}
-                                {billing.soap > 0 && (
-                                  <div className="flex justify-between">
-                                    <span>Tindakan / SOAP Dokter</span>
-                                    <span>+ Rp {billing.soap.toLocaleString('id-ID')}</span>
-                                  </div>
-                                )}
-                              </div>
-                              <div className="flex justify-between font-bold text-slate-700 border-t border-slate-200 pt-1.5 text-xs">
-                                <span>Total Pembayaran</span>
-                                <span className="text-indigo-600">Rp {billing.total.toLocaleString('id-ID')}</span>
-                              </div>
-                            </div>
-                          );
-                        })}
-                    </div>
-
-                    <div className="border-t border-slate-100 pt-3 flex justify-between items-center text-sm font-bold text-slate-800 bg-slate-50 p-2.5 rounded-xl">
-                      <span>Total Akumulasi Pendapatan</span>
-                      <span className="text-base sm:text-lg font-display text-indigo-700 font-extrabold">Rp {finalRevenue.toLocaleString('id-ID')}</span>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* Complete Patient Medical Records Box with Grouped History */}
-            {activeTab === 'medical' && (
-              <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
-                <div className="border-b border-slate-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <h4 className="font-bold text-slate-800 text-sm">Dashboard Rekam Medis Pasien Terpadu</h4>
-                    <p className="text-[10px] text-slate-500 mt-0.5">Riwayat rekam medis, status vitalitas, dan catatan SOAP per pasien</p>
-                  </div>
-                  
-                  {/* Search Input bar */}
-                  <div className="relative w-full sm:w-64">
-                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                      <Search size={14} />
-                    </span>
-                    <input
-                      type="text"
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      placeholder="Cari pasien atau No RM..."
-                      className="w-full pl-9 pr-8 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-med-blue focus:bg-white transition-all font-medium text-slate-800"
-                    />
-                    {searchTerm && (
-                      <button 
-                        onClick={() => setSearchTerm('')}
-                        className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600"
-                      >
-                        <X size={14} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {filteredGroupedPatients.length === 0 ? (
-                  <p className="text-xs text-slate-400 text-center py-12">Belum ada pasien terdaftar di database.</p>
-                ) : (
-                  <div className="space-y-4 max-h-[380px] overflow-y-auto pr-1">
-                    {filteredGroupedPatients.map((p: any) => {
-                    return (
-                      <div key={p.id} className="bg-slate-50/70 p-4 rounded-2xl border border-slate-100 space-y-3">
-                        {/* Patient Header */}
-                        <div className="flex justify-between items-start pb-2.5 border-b border-slate-200/60">
-                          <div>
-                            <div className="flex items-center space-x-2">
-                              <h5 className="font-bold text-slate-805 text-slate-800 text-sm">{p.name}</h5>
-                              {p.is_pregnant === 1 && (
-                                <span className="bg-rose-50 text-rose-600 px-2 py-0.5 rounded-full text-[9px] font-bold">Hamil</span>
-                              )}
-                            </div>
-                            <p className="text-[10px] text-slate-400 font-semibold uppercase mt-0.5">
-                              RM: {p.rm_number} • {p.age} Tahun • {p.gender}
-                            </p>
-                          </div>
-                          <span className="bg-blue-50 text-blue-600 px-2.5 py-0.5 rounded-full font-bold text-[9px] uppercase tracking-wider">
-                            {p.visits.length} Kunjungan
-                          </span>
-                        </div>
-
-                        {/* Visits History Timeline */}
-                        <div className="space-y-4 pt-1">
-                          {p.visits.map((v: any, index: number) => {
-                            const lastVitals = v.vitals?.[0];
-                            const lastSoap = v.soaps?.[0];
-                            const lastAnc = v.anc || p.anc;
-
-                            return (
-                              <div key={v.id} className="relative pl-4 border-l border-slate-200 space-y-2 last:pb-1">
-                                {/* Timeline Dot */}
-                                <div className="absolute -left-[5px] top-1.5 w-2.5 h-2.5 rounded-full bg-slate-350 border-2 border-white shadow-sm bg-slate-400"></div>
-                                
-                                <div className="flex justify-between items-center text-xs">
-                                  <span className="font-bold text-indigo-600 text-[11px]">
-                                    Kunjungan #{p.visits.length - index}
-                                  </span>
-                                  <span className={`px-2 py-0.5 rounded-full text-[8px] font-bold uppercase ${
-                                    (v.status === 'Selesai' || v.status === 'Lunas') ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
-                                  }`}>
-                                    {v.status}
-                                  </span>
-                                </div>
-
-                                <div className="text-xs space-y-2 pl-1">
-                                  <div>
-                                    <span className="text-[9px] uppercase font-bold text-slate-400 block mb-0.5">Keluhan Utama:</span>
-                                    <p className="bg-white p-2 rounded-lg text-slate-705 border border-slate-200/60 font-medium text-xs text-slate-700">
-                                      {v.complaint || '-'}
-                                    </p>
-                                  </div>
-
-                                  {lastVitals && (
-                                    <div>
-                                      <span className="text-[9px] uppercase font-bold text-slate-400 block mb-0.5">Kondisi Fisik & Vitalitas:</span>
-                                      <div className="grid grid-cols-3 gap-1.5">
-                                        <div className="bg-rose-50/20 p-1.5 rounded-lg border border-rose-100 text-center bg-white">
-                                          <span className="text-[8px] text-slate-400 block leading-none">Suhu</span>
-                                          <span className="font-bold text-slate-700 text-[10px]">{lastVitals.temperature || '-'}°C</span>
-                                        </div>
-                                        <div className="bg-blue-50/20 p-1.5 rounded-lg border border-blue-100 text-center bg-white">
-                                          <span className="text-[8px] text-slate-400 block leading-none">Tensi</span>
-                                          <span className="font-bold text-slate-700 text-[10px]">{lastVitals.blood_pressure || '-'}</span>
-                                        </div>
-                                        <div className="bg-emerald-50/20 p-1.5 rounded-lg border border-emerald-100 text-center bg-white">
-                                          <span className="text-[8px] text-slate-400 block leading-none">Detak</span>
-                                          <span className="font-bold text-slate-700 text-[10px]">{lastVitals.heart_rate || '-'} bpm</span>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  {lastSoap && (
-                                    <div className="pt-0.5">
-                                      <span className="text-[9px] uppercase font-bold text-slate-400 block mb-0.5">Hasil Rekam Medis (SOAP):</span>
-                                      <div className="bg-white p-2.5 rounded-lg border border-slate-250/60 border-slate-200/60 space-y-1 text-[10px] leading-relaxed text-slate-600">
-                                        <p><strong className="text-slate-500">S:</strong> {lastSoap.subjective || '-'}</p>
-                                        <p><strong className="text-slate-500">O:</strong> {lastSoap.objective || '-'}</p>
-                                        <p><strong className="text-slate-500">A:</strong> {lastSoap.assessment || '-'} {lastSoap.diagnosis && <span className="text-indigo-600 font-semibold">[ID: {lastSoap.diagnosis}]</span>}</p>
-                                        <p><strong className="text-slate-500">P:</strong> {lastSoap.plan || '-'}</p>
-                                        {lastSoap.created_at && (
-                                          <p className="text-[8px] text-slate-400 pt-1 border-t border-dashed border-slate-100 mt-1">
-                                            Waktu rilis: {lastSoap.created_at}
-                                          </p>
-                                        )}
-                                      </div>
-
-                                      {/* SOAP USG Image & Notes on Detailed Modal */}
-                                      {(lastSoap.usg_image || lastSoap.usg_image_notes) && (
-                                        <div className="bg-white p-2 rounded-lg border border-slate-200 mt-1.5 space-y-1.5 bg-slate-50/40">
-                                          <span className="text-[8px] uppercase font-bold text-indigo-500 block leading-none">Pemeriksaan USG SOAP Kunjungan:</span>
-                                          {lastSoap.usg_image && (
-                                            <div className="flex flex-col gap-1 justify-center bg-black/95 p-1 rounded-lg">
-                                              {getUsgImages(lastSoap.usg_image).map((img, i) => (
-                                                <img 
-                                                  key={i} 
-                                                  src={img} 
-                                                  alt="USG SOAP" 
-                                                  className="max-h-40 rounded object-contain border border-slate-700/50"
-                                                  referrerPolicy="no-referrer"
-                                                />
-                                              ))}
-                                            </div>
-                                          )}
-                                          {lastSoap.usg_image_notes && (
-                                            <p className="text-[9px] text-slate-605 text-slate-600 font-medium italic leading-relaxed"><strong>Catatan USG:</strong> {lastSoap.usg_image_notes}</p>
-                                          )}
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-
-                                  {/* ANC / Pregnancy USG Tracker in Timeline */}
-                                  {lastAnc && (
-                                    <div className="pt-2 border-t border-dashed border-rose-100 mt-2 bg-rose-50/20 p-2.5 rounded-xl border border-rose-100">
-                                      <span className="text-[9px] uppercase font-black text-rose-500 block mb-1.5 leading-none tracking-wider">Pemantauan Kehamilan & USG (ANC):</span>
-                                      
-                                      <div className="grid grid-cols-2 gap-1.5 text-[9px] bg-white p-2 rounded-lg border border-slate-200/60 font-sans">
-                                        {lastAnc.gestational_age && (
-                                          <div>
-                                            <span className="text-slate-400 block uppercase tracking-wider text-[8px] leading-none">Gestational Age:</span>
-                                            <span className="font-extrabold text-rose-600">{lastAnc.gestational_age} Mgg</span>
-                                          </div>
-                                        )}
-                                        {lastAnc.estimated_delivery_date && (
-                                          <div>
-                                            <span className="text-slate-400 block uppercase tracking-wider text-[8px] leading-none">HPL / Taksiran Lahir:</span>
-                                            <span className="font-extrabold text-indigo-600">{lastAnc.estimated_delivery_date}</span>
-                                          </div>
-                                        )}
-                                        {lastAnc.djj && (
-                                          <div>
-                                            <span className="text-slate-400 block uppercase tracking-wider text-[8px] leading-none font-sans">DJJ / Detak Janin:</span>
-                                            <span className="font-extrabold text-blue-600">{lastAnc.djj} bpm</span>
-                                          </div>
-                                        )}
-                                        {lastAnc.usg_tbj && (
-                                          <div>
-                                            <span className="text-slate-400 block uppercase tracking-wider text-[8px] leading-none">Taksiran Berat (TBJ):</span>
-                                            <span className="font-extrabold text-emerald-600">{lastAnc.usg_tbj} gr</span>
-                                          </div>
-                                        )}
-                                      </div>
-
-                                      {/* Biometry list */}
-                                      {(lastAnc.usg_bpd || lastAnc.usg_hc || lastAnc.usg_ac || lastAnc.usg_fl) && (
-                                        <div className="grid grid-cols-4 gap-1 text-center font-sans mt-1.5 text-[8.5px]">
-                                          {lastAnc.usg_bpd && <div className="bg-white border border-slate-200 p-1 rounded font-bold text-slate-700">BPD: {lastAnc.usg_bpd}</div>}
-                                          {lastAnc.usg_hc && <div className="bg-white border border-slate-205 border-slate-200 p-1 rounded font-bold text-slate-700">HC: {lastAnc.usg_hc}</div>}
-                                          {lastAnc.usg_ac && <div className="bg-white border border-slate-205 border-slate-200 p-1 rounded font-bold text-slate-700">AC: {lastAnc.usg_ac}</div>}
-                                          {lastAnc.usg_fl && <div className="bg-white border border-slate-205 border-slate-200 p-1 rounded font-bold text-slate-700">FL: {lastAnc.usg_fl}</div>}
-                                        </div>
-                                      )}
-
-                                      {/* Others */}
-                                      {(lastAnc.usg_placenta || lastAnc.usg_presentation) && (
-                                        <div className="grid grid-cols-2 gap-1 mt-1 text-[8.5px] font-sans">
-                                          {lastAnc.usg_placenta && <div className="bg-white border border-slate-200 p-1 px-1.5 rounded text-slate-600 truncate"><span className="text-slate-400 font-semibold text-[8px]">POSISI:</span> {lastAnc.usg_placenta}</div>}
-                                          {lastAnc.usg_presentation && <div className="bg-white border border-slate-200 p-1 px-1.5 rounded text-slate-600 truncate"><span className="text-slate-400 font-semibold text-[8px]">PRES:</span> {lastAnc.usg_presentation}</div>}
-                                        </div>
-                                      )}
-
-                                      {lastAnc.fetal_development && (
-                                        <p className="text-[10px] font-medium text-slate-700 bg-white p-2 rounded-lg border border-slate-200/50 mt-1.5">
-                                          <strong className="text-rose-500 font-bold uppercase text-[8px] block tracking-wide">Janin:</strong> {lastAnc.fetal_development}
-                                        </p>
-                                      )}
-
-                                      {/* USG Image inside Timeline */}
-                                      {getUsgImages(lastAnc.usg_image).length > 0 && (
-                                        <div className="flex flex-col gap-1 justify-center bg-black p-1.5 rounded-lg mt-1.5 w-full items-center">
-                                          {getUsgImages(lastAnc.usg_image).map((img, i) => (
-                                            <img 
-                                              key={i} 
-                                              src={img} 
-                                              alt="Obstetric USG" 
-                                              className="max-h-40 rounded object-contain"
-                                              referrerPolicy="no-referrer"
-                                            />
-                                          ))}
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+          {/* Patient Demographics Summary - Privacy Safe */}
+          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+            <div className="border-b border-slate-100 pb-3 mb-4">
+              <h4 className="font-bold text-slate-800 text-sm flex items-center">
+                <span>Demografi Pasien (Ringkasan)</span>
+              </h4>
+              <p className="text-[10px] text-slate-500 mt-0.5">
+                Data ditampilkan secara agregat untuk menjaga privasi medis pasien.
+              </p>
             </div>
-            )}
+            
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="bg-rose-50/50 p-4 rounded-xl border border-rose-100 flex flex-col items-center justify-center text-center">
+                <Heart size={20} className="text-rose-400 mb-2" />
+                <span className="text-[10px] font-bold text-rose-400 uppercase tracking-wider mb-1">Pasien Hamil</span>
+                <span className="text-2xl font-black text-rose-600">{pregnantPatients}</span>
+              </div>
+              <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 flex flex-col items-center justify-center text-center">
+                <Users size={20} className="text-emerald-400 mb-2" />
+                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider mb-1">Pasien Anak (&lt;17th)</span>
+                <span className="text-2xl font-black text-emerald-600">{childrenPatients}</span>
+              </div>
+              <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100 flex flex-col items-center justify-center text-center">
+                <Stethoscope size={20} className="text-blue-400 mb-2" />
+                <span className="text-[10px] font-bold text-blue-400 uppercase tracking-wider mb-1">Pasien Umum</span>
+                <span className="text-2xl font-black text-blue-600">{generalPatients}</span>
+              </div>
+            </div>
+            
+            <div className="mt-4 bg-indigo-50/30 p-3 rounded-xl border border-indigo-50 flex justify-between items-center">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Pasien Terdaftar</span>
+              <span className="text-lg font-black text-indigo-700">{totalPatients}</span>
+            </div>
+
+            <div className="mt-3 bg-slate-50 p-3 rounded-xl border border-slate-200 flex justify-between items-center">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Pendapatan</span>
+              <span className="text-lg font-black text-emerald-700">Rp {finalRevenue.toLocaleString('id-ID')}</span>
+            </div>
           </div>
         </div>
 
@@ -1393,46 +1075,33 @@ export function DeploymentMap() {
         }}
       >
         <Popup>
-          <div className="p-2 min-w-[200px]" role="complementary" aria-label={`Ringkasan ${location.name}`}>
-            <div className="flex items-center mb-2">
+          <div className="p-2 min-w-[180px] max-w-[240px]" role="complementary" aria-label={`Ringkasan ${location.name}`}>
+            <div className="flex items-center mb-1.5">
               <span className={`w-2 h-2 rounded-full mr-2 ${location.status === 'active' ? 'bg-med-green' : 'bg-amber-500'}`}></span>
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
                 {location.status === 'active' ? 'Aktif' : 'Terencana'}
               </span>
             </div>
             <strong className="block text-sm font-display text-slate-800 mb-1 leading-tight">{location.name}</strong>
-            <p className="text-[11px] text-slate-600 line-clamp-2 mb-3 leading-snug">
+            <p className="text-[11px] text-slate-600 line-clamp-2 mb-2 leading-snug">
               {location.description}
             </p>
 
-            <div className="flex flex-col gap-2 mb-3 border-t border-slate-100 pt-3">
-              {location.sponsorName && location.sponsorLogo && (
-                <div className="flex items-center justify-between bg-amber-50/50 p-2 rounded-lg border border-amber-100 shadow-sm">
-                  <div className="flex gap-1.5 flex-wrap max-w-[60%]">
-                    {parseLogos(location.sponsorLogo).map((logo, idx) => (
-                      <img key={idx} src={logo} alt={location.sponsorName} className="w-auto h-auto max-h-6 max-w-[60px] rounded object-contain bg-white px-1 py-0.5 border border-amber-200" />
+            {location.sponsorName && (
+              <div className="flex items-center gap-2 bg-amber-50/50 p-1.5 rounded-lg border border-amber-100 mb-2">
+                {location.sponsorLogo && (
+                  <div className="flex gap-1 shrink-0">
+                    {parseLogos(location.sponsorLogo).slice(0, 1).map((logo, idx) => (
+                      <img key={idx} src={logo} alt={location.sponsorName} className="h-5 w-auto rounded object-contain bg-white px-1 border border-amber-200" />
                     ))}
                   </div>
-                  <div className="text-right">
-                    <p className="text-[8px] font-bold text-amber-500 uppercase tracking-widest leading-none mb-0.5">Sponsor</p>
-                    <p className="text-[9px] font-bold text-slate-700 leading-tight">{location.sponsorName}</p>
-                  </div>
+                )}
+                <div>
+                  <p className="text-[7px] font-bold text-amber-500 uppercase tracking-widest leading-none">Sponsor</p>
+                  <p className="text-[9px] font-bold text-slate-700 leading-tight">{location.sponsorName}</p>
                 </div>
-              )}
-              {location.supportLogo && (
-                <div className="flex items-center justify-between bg-blue-50/50 p-2 rounded-lg border border-blue-100 shadow-sm">
-                  <div className="flex gap-1.5 flex-wrap max-w-[60%]">
-                    {parseLogos(location.supportLogo).map((logo, idx) => (
-                      <img key={idx} src={logo} alt="Support" className="w-auto h-auto max-h-6 max-w-[60px] rounded object-contain bg-white px-1 py-0.5 border border-blue-200" />
-                    ))}
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[8px] font-bold text-blue-500 uppercase tracking-widest leading-none mb-0.5">Support</p>
-                    <p className="text-[9px] font-bold text-slate-700 leading-tight">Kerjasama</p>
-                  </div>
-                </div>
-              )}
-            </div>
+              </div>
+            )}
 
             <button 
               onClick={(e) => {
