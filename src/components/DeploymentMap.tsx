@@ -628,22 +628,15 @@ function ClinicDetailModal({
 }) {
   const clinic = location.raw || {};
   const patients = clinic.patients || [];
-  const [activeTab, setActiveTab] = useState<'medical' | 'financial'>('medical');
-  const [searchTerm, setSearchTerm] = useState('');
-  
   // Group patients helper
   const groupedPatients = useMemo(() => {
     return getGroupedPatients(patients);
   }, [patients]);
 
-  const filteredGroupedPatients = useMemo(() => {
-    if (!searchTerm.trim()) return groupedPatients;
-    const query = searchTerm.toLowerCase();
-    return groupedPatients.filter(p => 
-      p.name?.toLowerCase().includes(query) || 
-      p.rm_number?.toLowerCase().includes(query)
-    );
-  }, [groupedPatients, searchTerm]);
+  const totalPatients = groupedPatients.length;
+  const pregnantPatients = groupedPatients.filter(p => p.is_pregnant === 1).length;
+  const childrenPatients = groupedPatients.filter(p => (Number(p.age) || 0) < 17 && p.is_pregnant !== 1).length;
+  const generalPatients = totalPatients - pregnantPatients - childrenPatients;
 
   // Group patients by status for stats
   const paidPatients = patients.filter((p: any) => p.status === 'Selesai' || p.status === 'Lunas');
