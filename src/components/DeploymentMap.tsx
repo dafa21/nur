@@ -1325,7 +1325,7 @@ export function DeploymentMap() {
               services: [],
               sponsorName: clinic.sponsor_name || '',
               sponsorLogo: clinic.sponsor_logo || '',
-              supportLogo: clinic.support_logo || clinic.kerjasama_logo || '',
+              supportLogo: clinic.support_logos || clinic.support_logo || clinic.kerjasama_logo || '',
               youtubeLink: clinic.youtube_link || clinic.youtube_tv_link || '',
               raw: {
                 ...clinic,
@@ -1411,6 +1411,36 @@ export function DeploymentMap() {
             <p className="text-[11px] text-slate-600 line-clamp-2 mb-3 leading-snug">
               {location.description}
             </p>
+
+            <div className="flex flex-col gap-2 mb-3 border-t border-slate-100 pt-3">
+              {location.sponsorName && location.sponsorLogo && (
+                <div className="flex items-center justify-between bg-amber-50/50 p-2 rounded-lg border border-amber-100 shadow-sm">
+                  <div className="flex gap-1.5 flex-wrap max-w-[60%]">
+                    {parseLogos(location.sponsorLogo).map((logo, idx) => (
+                      <img key={idx} src={logo} alt={location.sponsorName} className="w-auto h-auto max-h-6 max-w-[60px] rounded object-contain bg-white px-1 py-0.5 border border-amber-200" />
+                    ))}
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[8px] font-bold text-amber-500 uppercase tracking-widest leading-none mb-0.5">Sponsor</p>
+                    <p className="text-[9px] font-bold text-slate-700 leading-tight">{location.sponsorName}</p>
+                  </div>
+                </div>
+              )}
+              {location.supportLogo && (
+                <div className="flex items-center justify-between bg-blue-50/50 p-2 rounded-lg border border-blue-100 shadow-sm">
+                  <div className="flex gap-1.5 flex-wrap max-w-[60%]">
+                    {parseLogos(location.supportLogo).map((logo, idx) => (
+                      <img key={idx} src={logo} alt="Support" className="w-auto h-auto max-h-6 max-w-[60px] rounded object-contain bg-white px-1 py-0.5 border border-blue-200" />
+                    ))}
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[8px] font-bold text-blue-500 uppercase tracking-widest leading-none mb-0.5">Support</p>
+                    <p className="text-[9px] font-bold text-slate-700 leading-tight">Kerjasama</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <button 
               onClick={(e) => {
                 e.stopPropagation();
