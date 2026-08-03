@@ -25,11 +25,9 @@ jobs:
           sudo apt-get install -y sshpass
           export SSHPASS=$SSH_PASSWORD
           sshpass -e ssh -o StrictHostKeyChecking=no -o ConnectTimeout=60 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-            "echo '=== Membunuh PM2 dan Node ===' && \
-             pm2 kill || true && \
-             pkill -9 -f node || true && \
-             pkill -9 -f tsx || true && \
-             echo 'CPU sudah lega.'" || echo "Gagal terhubung, tapi kita akan tetap lanjut."
+            "echo '=== Restarting nurhealth-main ===' && \
+             pm2 stop nurhealth-main || true && \
+             echo 'Ready for deployment.'" || echo "Gagal terhubung, tapi kita akan tetap lanjut."
 
       # ─── STEP 2: Setup Node.js di GitHub Runner (RAM 7GB, CPU cepat) ───────
       - name: Setup Node.js
