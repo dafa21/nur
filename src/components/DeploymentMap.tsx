@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import MarkerClusterGroup from 'react-leaflet-cluster';
 import L from 'leaflet';
 import { motion, AnimatePresence } from 'motion/react';
-import { Info, Users, Activity, CheckCircle2, MapPin, X, ArrowRight, Sun, Cloud, CloudRain, CloudSnow, CloudLightning, Thermometer, Share2, Check, Stethoscope, FileText, HeartPulse, ChevronDown, ChevronUp, Search, Pill, FlaskConical, AlertCircle, Heart, Calendar, Wind, Scale, Eye } from 'lucide-react';
+import { Info, Users, Activity, CheckCircle2, MapPin, X, ArrowRight, Camera, ChevronLeft, ChevronRight, Maximize2, Sun, Cloud, CloudRain, CloudSnow, CloudLightning, Thermometer, Share2, Check, Stethoscope, FileText, HeartPulse, ChevronDown, ChevronUp, Search, Pill, FlaskConical, AlertCircle, Heart, Calendar, Wind, Scale, Eye } from 'lucide-react';
 
 const panelVariants: any = {
   initial: { opacity: 0, x: 30, filter: 'blur(10px)' },
@@ -210,6 +210,242 @@ function getUsgImages(imgField: any): string[] {
     }
   }
   return [];
+}
+
+
+function parsePhotos(photoField: any): string[] {
+  if (!photoField) return [];
+  if (Array.isArray(photoField)) return photoField.filter(Boolean);
+  if (typeof photoField === 'string') {
+    const trimmed = photoField.trim();
+    if (trimmed.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) return parsed.filter(Boolean);
+      } catch (e) {}
+    }
+    if (trimmed.includes(',')) {
+      return trimmed.split(',').map(s => s.trim()).filter(Boolean);
+    }
+    if (trimmed.length > 0) return [trimmed];
+  }
+  return [];
+}
+
+function PhotoLightboxModal({
+  photos,
+  initialIndex,
+  onClose,
+  title
+}: {
+  photos: string[];
+  initialIndex: number;
+  onClose: () => void;
+  title?: string;
+}) {
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowRight') setCurrentIndex((prev) => (prev + 1) % photos.length);
+      if (e.key === 'ArrowLeft') setCurrentIndex((prev) => (prev - 1 + photos.length) % photos.length);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [photos.length, onClose]);
+
+  if (!photos || photos.length === 0) return null;
+  const currentPhoto = photos[currentIndex] || photos[0];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[10000] bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-between p-4 select-none"
+      onClick={onClose}
+    >
+      {/* Top Header */}
+      <div 
+        className="w-full max-w-5xl flex items-center justify-between py-2 text-white z-10"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-2">
+          <Camera size={18} className="text-emerald-400" />
+          <span className="text-sm font-bold truncate">{title || 'Dokumentasi Fasilitas Klinik'}</span>
+          <span className="text-xs text-slate-400 ml-2">
+            ({currentIndex + 1} / {photos.length})
+          </span>
+        </div>
+        <button
+          onClick={onClose}
+          className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+          title="Tutup"
+        >
+          <X size={20} />
+        </button>
+      </div>
+
+      {/* Main Large Photo */}
+      <div 
+        className="relative flex-grow flex items-center justify-center w-full max-w-5xl my-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {photos.length > 1 && (
+          <button
+            onClick={() => setCurrentIndex((prev) => (prev - 1 + photos.length) % photos.length)}
+            className="absolute left-2 sm:left-4 z-10 p-2.5 sm:p-3 rounded-full bg-black/60 hover:bg-black/80 text-white transition-all backdrop-blur-sm border border-white/10 shadow-xl cursor-pointer"
+            title="Sebelumnya"
+          >
+            <ChevronLeft size={24} />
+          </button>
+        )}
+
+        <img
+          key={currentIndex}
+          src={currentPhoto}
+          alt={`Foto ${currentIndex + 1}`}
+          className="max-h-[75vh] max-w-full rounded-2xl object-contain shadow-2xl border border-white/10 animate-in fade-in duration-200"
+        />
+
+        {photos.length > 1 && (
+          <button
+            onClick={() => setCurrentIndex((prev) => (prev + 1) % photos.length)}
+            className="absolute right-2 sm:right-4 z-10 p-2.5 sm:p-3 rounded-full bg-black/60 hover:bg-black/80 text-white transition-all backdrop-blur-sm border border-white/10 shadow-xl cursor-pointer"
+            title="Berikutnya"
+          >
+            <ChevronRight size={24} />
+          </button>
+        )}
+      </div>
+
+      {/* Bottom Thumbnails */}
+      {photos.length > 1 && (
+        <div 
+          className="w-full max-w-2xl flex items-center justify-center gap-2 overflow-x-auto py-2 z-10 custom-scrollbar"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {photos.map((p, idx) => (
+            <button
+              key={idx}
+              onClick={() => setCurrentIndex(idx)}
+              className={`w-14 h-10 rounded-lg overflow-hidden border-2 transition-all shrink-0 cursor-pointer ${
+                idx === currentIndex ? 'border-emerald-400 scale-105 shadow-md ring-2 ring-emerald-400/30' : 'border-transparent opacity-60 hover:opacity-100'
+              }`}
+            >
+              <img src={p} alt="" className="w-full h-full object-cover" />
+            </button>
+          ))}
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
+function SidebarPhotoShowcase({
+  photos,
+  clinicName,
+  onOpenLightbox
+}: {
+  photos: string[];
+  clinicName: string;
+  onOpenLightbox: (photos: string[], idx: number) => void;
+}) {
+  const [activeIdx, setActiveIdx] = useState(0);
+
+  if (!photos || photos.length === 0) return null;
+  const currentPhoto = photos[activeIdx] || photos[0];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.25 }}
+      className="space-y-2.5"
+    >
+      <div className="flex items-center justify-between px-0.5">
+        <h5 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+          <Camera size={13} className="text-med-blue" />
+          <span>Foto & Fasilitas Klinik</span>
+        </h5>
+        <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+          {photos.length} Foto
+        </span>
+      </div>
+
+      {/* Main Preview Card */}
+      <div 
+        onClick={() => onOpenLightbox(photos, activeIdx)}
+        className="group relative aspect-[16/10] w-full rounded-2xl overflow-hidden border border-slate-200/80 shadow-sm hover:shadow-md bg-slate-100 cursor-pointer transition-all"
+      >
+        <img
+          src={currentPhoto}
+          alt={`${clinicName} - Foto ${activeIdx + 1}`}
+          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+        />
+
+        {/* Counter Badge */}
+        <div className="absolute top-2 left-2 bg-slate-900/70 backdrop-blur-md text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm">
+          <Camera size={11} />
+          <span>{activeIdx + 1} / {photos.length}</span>
+        </div>
+
+        {/* Zoom Button */}
+        <div className="absolute top-2 right-2 bg-slate-900/70 hover:bg-slate-900/90 backdrop-blur-md text-white p-1.5 rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">
+          <Maximize2 size={12} />
+        </div>
+
+        {/* Navigation Arrows if > 1 photo */}
+        {photos.length > 1 && (
+          <div className="absolute inset-x-2 top-1/2 -translate-y-1/2 flex justify-between pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveIdx((prev) => (prev - 1 + photos.length) % photos.length);
+              }}
+              className="p-1.5 rounded-full bg-black/60 hover:bg-black/80 text-white backdrop-blur-sm pointer-events-auto transition-colors shadow cursor-pointer"
+              title="Sebelumnya"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveIdx((prev) => (prev + 1) % photos.length);
+              }}
+              className="p-1.5 rounded-full bg-black/60 hover:bg-black/80 text-white backdrop-blur-sm pointer-events-auto transition-colors shadow cursor-pointer"
+              title="Berikutnya"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Thumbnails row if multiple photos */}
+      {photos.length > 1 && (
+        <div className="flex gap-1.5 overflow-x-auto pb-1 pt-0.5 custom-scrollbar">
+          {photos.map((p, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => setActiveIdx(idx)}
+              className={`relative w-12 h-8 rounded-lg overflow-hidden border-2 shrink-0 transition-all cursor-pointer ${
+                idx === activeIdx
+                  ? 'border-blue-500 ring-2 ring-blue-100 scale-105'
+                  : 'border-slate-200 opacity-60 hover:opacity-100'
+              }`}
+            >
+              <img src={p} alt="" className="w-full h-full object-cover" />
+            </button>
+          ))}
+        </div>
+      )}
+    </motion.div>
+  );
 }
 
 function parseLogos(logoField: any): string[] {
@@ -615,6 +851,7 @@ function PatientList({ patients }: { patients: any[] }) {
           })
         )}
       </div>
+
     </div>
   );
 }
@@ -627,6 +864,8 @@ function ClinicDetailModal({
   onClose: () => void; 
 }) {
   const clinic = location.raw || {};
+  const [modalLightboxIndex, setModalLightboxIndex] = useState<number | null>(null);
+  const clinicPhotos = location.photos && location.photos.length > 0 ? location.photos : parsePhotos(clinic.photos || clinic.clinic_photos || clinic.images);
   const patients = clinic.patients || [];
   // Group patients helper
   const groupedPatients = useMemo(() => {
@@ -802,7 +1041,50 @@ function ClinicDetailModal({
             </div>
           </div>
 
-          {/* Patient Demographics Summary - Privacy Safe */}
+                    {/* Clinic Photos Gallery (Gambar 3) */}
+          {clinicPhotos.length > 0 && (
+            <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+              <div className="border-b border-slate-100 pb-3 mb-4 flex items-center justify-between">
+                <div>
+                  <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                    <Camera size={16} className="text-med-blue" />
+                    <span>Foto & Dokumentasi Fasilitas Klinik</span>
+                  </h4>
+                  <p className="text-[10px] text-slate-500 mt-0.5">
+                    Dokumentasi fisik fasilitas, infrastruktur, dan kegiatan operasional klinik di lokasi.
+                  </p>
+                </div>
+                <span className="text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1 rounded-full">
+                  {clinicPhotos.length} Foto
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {clinicPhotos.map((photo: string, idx: number) => (
+                  <div
+                    key={idx}
+                    onClick={() => setModalLightboxIndex(idx)}
+                    className="group relative aspect-[4/3] rounded-xl overflow-hidden border border-slate-200 bg-slate-100 cursor-pointer shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5"
+                  >
+                    <img
+                      src={photo}
+                      alt={`${location.name} - Foto ${idx + 1}`}
+                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      loading="lazy"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-between p-2.5 text-white">
+                      <span className="text-[10px] font-bold">Foto #{idx + 1}</span>
+                      <div className="p-1 rounded-full bg-black/40 backdrop-blur-sm">
+                        <Maximize2 size={12} />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+{/* Patient Demographics Summary - Privacy Safe */}
           <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm">
             <div className="border-b border-slate-100 pb-3 mb-4">
               <h4 className="font-bold text-slate-800 text-sm flex items-center">
@@ -852,6 +1134,16 @@ function ClinicDetailModal({
             Tutup Dashboard
           </button>
         </div>
+        <AnimatePresence>
+          {modalLightboxIndex !== null && (
+            <PhotoLightboxModal
+              photos={clinicPhotos}
+              initialIndex={modalLightboxIndex}
+              onClose={() => setModalLightboxIndex(null)}
+              title={location.name}
+            />
+          )}
+        </AnimatePresence>
       </motion.div>
     </div>
   );
@@ -876,6 +1168,7 @@ interface Location {
   sponsorLogo?: any;
   supportLogo?: any;
   youtubeLink?: string;
+  photos?: string[];
   raw?: any;
 }
 
@@ -888,6 +1181,7 @@ export function DeploymentMap() {
   const [copied, setCopied] = useState(false);
   const [isInView, setIsInView] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [sidebarLightboxIndex, setSidebarLightboxIndex] = useState<number | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -1002,6 +1296,7 @@ export function DeploymentMap() {
               sponsorLogo: clinic.sponsor_logo || '',
               supportLogo: clinic.support_logos || clinic.support_logo || clinic.kerjasama_logo || '',
               youtubeLink: clinic.youtube_link || clinic.youtube_tv_link || '',
+              photos: parsePhotos(clinic.photos || clinic.clinic_photos || clinic.images),
               raw: {
                 ...clinic,
                 revenue: finalRevenue,
@@ -1243,7 +1538,16 @@ export function DeploymentMap() {
                 </p>
               </motion.div>
 
-              {/* Badges: Sponsor, Support & Kerjasama, YouTube */}
+                            {/* Photos Showcase on Sidebar (Gambar 2) */}
+              {selectedHub.photos && selectedHub.photos.length > 0 && (
+                <SidebarPhotoShowcase
+                  photos={selectedHub.photos}
+                  clinicName={selectedHub.name}
+                  onOpenLightbox={(photos, idx) => setSidebarLightboxIndex(idx)}
+                />
+              )}
+
+{/* Badges: Sponsor, Support & Kerjasama, YouTube */}
               <div className="flex flex-col gap-3">
                 {selectedHub.sponsorName && (
                   <motion.div
@@ -1396,6 +1700,17 @@ export function DeploymentMap() {
           <ClinicDetailModal 
             location={selectedHub} 
             onClose={() => setShowDetailModal(false)} 
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {sidebarLightboxIndex !== null && selectedHub && selectedHub.photos && (
+          <PhotoLightboxModal
+            photos={selectedHub.photos}
+            initialIndex={sidebarLightboxIndex}
+            onClose={() => setSidebarLightboxIndex(null)}
+            title={selectedHub.name}
           />
         )}
       </AnimatePresence>
